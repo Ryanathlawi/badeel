@@ -45,6 +45,42 @@ struct Asset {
     size: u64,
 }
 
+/// وصف الإصدار يُكتب بماركداون على GitHub، والنافذة تعرض نصًّا عاديًّا،
+/// فكانت العلامات تظهر كما هي. هذه تنزعها وتترك الكلام وحده.
+pub fn plain_notes(md: &str) -> String {
+    let mut out = String::new();
+    for line in md.lines() {
+        let t = line.trim();
+        if t.starts_with("---") || t.starts_with("```") {
+            continue;
+        }
+        let t = t.trim_start_matches('#').trim_start();
+        let t = match t.strip_prefix("- ") {
+            Some(rest) => format!("\u{2022} {rest}"),
+            None => t.to_owned(),
+        };
+        let t = t.replace("**", "").replace('`', "");
+        if t.is_empty() && out.ends_with("\n\n") {
+            continue;
+        }
+        out.push_str(&t);
+        out.push('\n');
+    }
+    out.trim().to_owned()
+}
+
+#[cfg(test)]
+mod notes_tests {
+    #[test]
+    fn markdown_marks_are_stripped() {
+        let out = super::plain_notes("### عنوان\n\n- **أمر** مهم\n```\ncode\n```\n");
+        assert!(!out.contains('#'), "{out}");
+        assert!(!out.contains("**"), "{out}");
+        assert!(!out.contains("```"), "{out}");
+        assert!(out.contains('\u{2022}'), "{out}");
+    }
+}
+
 pub fn current_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }

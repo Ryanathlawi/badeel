@@ -3926,7 +3926,11 @@ impl App {
                     if !u.notes.trim().is_empty() {
                         ui.add_space(8.0);
                         egui::ScrollArea::vertical().max_height(170.0).show(ui, |ui| {
-                            ui.label(RichText::new(u.notes.trim()).size(11.5).color(pal.muted));
+                            ui.label(
+                                RichText::new(update::plain_notes(&u.notes))
+                                    .size(11.5)
+                                    .color(pal.muted),
+                            );
                         });
                     }
                     ui.add_space(12.0);
