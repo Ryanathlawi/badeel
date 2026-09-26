@@ -68,7 +68,9 @@ pub fn is_newer(candidate: &str, current: &str) -> bool {
 
 fn http_get(url: &str) -> Result<Vec<u8>> {
 
-    let out = std::process::Command::new("powershell.exe")
+    let mut cmd = std::process::Command::new("powershell.exe");
+    super::procs::hidden(&mut cmd);
+    let out = cmd
         .args([
             "-NoProfile",
             "-NonInteractive",

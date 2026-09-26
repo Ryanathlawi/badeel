@@ -11,6 +11,20 @@ const GRACEFUL_WAIT: Duration = Duration::from_secs(8);
 const FORCE_WAIT: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(150);
 
+/// ويندوز يفتح نافذة طرفية سوداء لكل برنامج طرفية يُشغَّل من برنامج
+/// رسومي، فنمنعها. هذا سبب ظهور نافذة بور شيل عند بدء التشغيل.
+#[cfg(windows)]
+pub fn hidden(cmd: &mut Command) -> &mut Command {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    cmd.creation_flags(CREATE_NO_WINDOW)
+}
+
+#[cfg(not(windows))]
+pub fn hidden(cmd: &mut Command) -> &mut Command {
+    cmd
+}
+
 fn system() -> System {
     System::new_with_specifics(RefreshKind::nothing().with_processes(ProcessRefreshKind::nothing()))
 }
@@ -36,6 +50,7 @@ fn taskkill(name: &str, force: bool) {
     cmd.args(["/T", "/IM", name])
         .stdout(Stdio::null())
         .stderr(Stdio::null());
+    hidden(&mut cmd);
     let _ = cmd.status();
 }
 

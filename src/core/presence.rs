@@ -14,9 +14,11 @@ use discord_rich_presence::{DiscordIpc, DiscordIpcClient, activity};
 /// معرّف التطبيق في لوحة مطوّري ديسكورد.
 const APP_ID: &str = "1553285643512315974";
 
-/// مفاتيح الصور كما هي مرفوعة في لوحة المطوّرين، حرفًا بحرف.
-const LARGE: &str = "badeelbanner";
-const SMALL: &str = "badeel";
+/// مفاتيح الصور كما هي مرفوعة في Rich Presence Assets، حرفًا بحرف.
+/// وصورة الغلاف في لوحة المطوّرين خانة أخرى لا مفتاح لها، فلا تصلح هنا.
+const LARGE: &str = "badeel";
+/// الشارة الصغيرة على ركن الكبيرة. اتركها فارغة ما لم تُرفع صورة ثانية.
+const SMALL: &str = "";
 
 const SITE: &str = "https://ryanathlawi.github.io/badeel-site/";
 const CODE: &str = "https://github.com/Ryanathlawi/badeel";
@@ -110,13 +112,14 @@ impl Presence {
         let payload = activity::Activity::new()
             .details(details)
             .state(state)
-            .assets(
-                activity::Assets::new()
-                    .large_image(LARGE)
-                    .large_text(details)
-                    .small_image(SMALL)
-                    .small_text(state),
-            )
+            .assets({
+                let a = activity::Assets::new().large_image(LARGE).large_text(details);
+                if SMALL.is_empty() {
+                    a
+                } else {
+                    a.small_image(SMALL).small_text(state)
+                }
+            })
             .timestamps(activity::Timestamps::new().start(self.since))
             .buttons(vec![
                 activity::Button::new(site, SITE),

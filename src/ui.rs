@@ -827,11 +827,11 @@ pub fn rail_button(
             color.gamma_multiply(0.85),
         );
     }
+    // العلامة تلتصق بالأيقونة نفسها لا بركن الزر، فالزر بلا خلفية ظاهرة
+    // ما لم يكن مختارًا أو تحت المؤشر، فتبدو العلامة عائمة بعيدة عنها
+    let mark = pos2(rect.center().x + icon * 0.55, rect.center().y - icon * 0.5);
     if count > 0 {
-        let br = Rect::from_center_size(
-            pos2(rect.right() - 6.0, rect.top() + 6.0),
-            vec2(16.0, 14.0),
-        );
+        let br = Rect::from_center_size(mark, vec2(16.0, 14.0));
         p.rect_filled(br, 999.0, pal.bg_deep);
         p.rect_stroke(
             br,
@@ -847,11 +847,7 @@ pub fn rail_button(
             pal.muted,
         );
     } else if installed {
-        p.circle_filled(
-            pos2(rect.right() - 6.0, rect.top() + 6.0),
-            3.0,
-            pal.live.gamma_multiply(0.45 + 0.35 * pulse(t, 1.7)),
-        );
+        p.circle_filled(mark, 3.0, pal.live.gamma_multiply(0.5 + 0.35 * pulse(t, 1.7)));
     }
     resp
 }

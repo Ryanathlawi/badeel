@@ -169,7 +169,16 @@ pub const PLATFORMS: &[Platform] = &[
         id: "ubisoft",
         name_ar: "يوبيسوفت",
         name_en: "Ubisoft Connect",
-        exes: &["upc.exe", "UplayService.exe", "UplayWebCore.exe"],
+        exes: &[
+            "UbisoftConnect.exe",
+            "UbisoftGameLauncher.exe",
+            "UbisoftGameLauncher64.exe",
+            "UbisoftExtension.exe",
+            "upc.exe",
+            "UplayService.exe",
+            "UplayWebCore.exe",
+            "UplayCrashReporter.exe",
+        ],
         close: Close::Force,
         locate: &[
             Locator::RegDir {
