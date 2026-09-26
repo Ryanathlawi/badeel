@@ -3,6 +3,7 @@ pub mod clock;
 pub mod fsops;
 pub mod jsonpath;
 pub mod paths;
+pub mod presence;
 pub mod procs;
 pub mod profile;
 pub mod registry;

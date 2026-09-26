@@ -29,6 +29,7 @@ aes-gcm = "0.11.1"
 getrandom = "0.3.4"
 argon2 = { version = "0.6.0", default-features = false, features = ["alloc"] }
 zeroize = { version = "1.9.0", features = ["derive"] }
+discord-rich-presence = "1.1.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winreg = "0.56.0"

@@ -9,7 +9,7 @@ use crate::core::update::{self, Progress};
 use crate::core::vault::{self, VaultKey};
 use crate::about;
 use crate::core::profile::{self, Book};
-use crate::core::{paths, procs, steam, store, switch};
+use crate::core::{paths, presence, procs, steam, store, switch};
 use crate::i18n::Lang;
 use crate::motion::{self, Motion, back_out, ease_out};
 use crate::showcase::{self, Showcase};
@@ -43,6 +43,8 @@ pub struct Settings {
     pub lock_on_minimize: bool,
     #[serde(default = "yes")]
     pub auto_update: bool,
+    #[serde(default)]
+    pub discord: bool,
 }
 
 fn yes() -> bool {
@@ -65,6 +67,7 @@ impl Default for Settings {
             auto_lock_min: 0,
             lock_on_minimize: false,
             auto_update: true,
+            discord: false,
         }
     }
 }
@@ -163,6 +166,7 @@ pub struct App {
     list_in: f32,
     search: String,
     refresh_at: Instant,
+    presence: presence::Presence,
 }
 
 impl App {
@@ -243,10 +247,32 @@ impl App {
             list_in: 0.0,
             search: String::new(),
             refresh_at: Instant::now(),
+            presence: presence::Presence::new(),
         };
         app.picking = app.book.profiles.len() > 1;
+        app.presence.set_enabled(app.settings.discord);
         app.reload();
         app
+    }
+
+    /// سطرا نشاط ديسكورد. لا اسم حساب فيهما ولا اسم منصّة، فما يظهر
+    /// لأصدقائك أن بديل مفتوح عندك لا أكثر.
+    ///
+    /// وهما بالإنجليزية دائمًا مهما كانت لغة الواجهة، لأن من يقرؤهما
+    /// أصدقاؤك في ديسكورد لا أنت.
+    fn tell_discord(&mut self) {
+        if !self.settings.discord {
+            return;
+        }
+        let state = if self.busy.is_some() || self.step.is_some() {
+            "Switching an account"
+        } else if self.key.is_none() {
+            "Vault locked"
+        } else {
+            "Vault unlocked and encrypted"
+        };
+        self.presence
+            .show("Game account switcher", state, "Website", "Source");
     }
 
     fn pace(&self, ctx: &egui::Context, frame_start: Instant, budget_ms: u64) {
@@ -600,6 +626,7 @@ impl eframe::App for App {
         let pick_target = if self.picking { 1.0 } else { 0.0 };
         self.pick_in = mo.step(self.pick_in, pick_target, dt, motion::SPEED_PANEL);
         self.show.tick(dt, mo);
+        self.tell_discord();
         if self.curtain > 0.0 {
             self.curtain = if mo.enabled {
                 (self.curtain - dt / 0.78).max(0.0)
@@ -2259,6 +2286,7 @@ impl App {
         let mut toggle_backdrop = false;
         let mut toggle_showcase = false;
         let mut toggle_mask = false;
+        let mut toggle_discord = false;
         let mut toggle_minlock = false;
         let mut toggle_autoupd = false;
         let mut want_lang = false;
@@ -2836,6 +2864,22 @@ impl App {
                                     ) {
                                         toggle_mask = true;
                                     }
+                                    if ui::toggle(
+                                        ui,
+                                        &pal,
+                                        rtl,
+                                        lang.t(
+                                            "أظهر بديل في نشاط ديسكورد",
+                                            "Show badeel in your Discord activity",
+                                        ),
+                                        lang.t(
+                                            "سطران عامّان بلا اسم حساب ولا منصّة، ولا يخرج اتصال من البرنامج",
+                                            "Two generic lines, no account or platform name, and no connection leaves the app",
+                                        ),
+                                        self.settings.discord,
+                                    ) {
+                                        toggle_discord = true;
+                                    }
                                     if ui::setting_row(
                                         ui,
                                         &pal,
@@ -2974,6 +3018,10 @@ impl App {
         }
         if toggle_showcase {
             self.settings.showcase = !self.settings.showcase;
+        }
+        if toggle_discord {
+            self.settings.discord = !self.settings.discord;
+            self.presence.set_enabled(self.settings.discord);
         }
         if toggle_mask {
             self.settings.mask_ids = !self.settings.mask_ids;
