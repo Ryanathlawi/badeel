@@ -1,0 +1,113 @@
+name: release
+
+# يبني الإصدار وينشره من أجهزة GitHub لا من جهاز أحد، فيكون كل ملف
+# منشور مبنيًّا من كوميت علني بسجل مفتوح يقدر أي أحد أن يفتحه ويقارن
+# بصمته ببصمة ما نزّله.
+#
+# ادفع وسمًا مثل v0.1.2 فينشر الإصدار من نفسه.
+# أو شغّله يدويًّا من تبويب Actions لبناء تجريبي بلا نشر.
+#
+# عنوان الإصدار ووصفه يؤخذان من .github/notes/<الوسم>.md إن وُجد،
+# وأول سطر فيه يبدأ بـ # يصير العنوان. وإن لم يوجد الملف كُتب الوصف
+# من الكوميتات تلقائيًّا.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # rustup مثبّت أصلًا على المشغّل، فلا نحتاج إضافة من طرف ثالث
+      - name: Rust
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          rustc --version
+          cargo --version
+
+      - name: Test
+        run: cargo test --release --locked
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Hash
+        id: hash
+        shell: pwsh
+        run: |
+          $exe = "target/release/badeel.exe"
+          $h = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+          $mb = [math]::Round((Get-Item $exe).Length / 1MB, 2)
+          "sha256=$h" >> $env:GITHUB_OUTPUT
+          Write-Host "badeel.exe  $mb MB"
+          Write-Host "sha256      $h"
+
+      # يبقى الملف متاحًا للتنزيل من صفحة التشغيل حتى في البناء التجريبي
+      - uses: actions/upload-artifact@v4
+        with:
+          name: badeel-exe
+          path: target/release/badeel.exe
+
+      # الوسم يجب أن يطابق رقم الإصدار في Cargo.toml، وإلا وقف النشر
+      - name: Check the tag matches Cargo.toml
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}".TrimStart("v")
+          $toml = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          if ($tag -ne $toml) {
+            Write-Error "الوسم $tag لا يطابق رقم الإصدار في Cargo.toml وهو $toml"
+            exit 1
+          }
+          Write-Host "الوسم ورقم الإصدار متطابقان: $toml"
+
+      - name: Publish
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $title = $tag
+          $file = ".github/notes/$tag.md"
+
+          if (Test-Path $file) {
+            $lines = @(Get-Content $file)
+            if ($lines.Count -gt 0 -and $lines[0].StartsWith("# ")) {
+              $title = $lines[0].Substring(2).Trim()
+              $body = ($lines | Select-Object -Skip 1) -join "`n"
+            } else {
+              $body = $lines -join "`n"
+            }
+          } else {
+            $body = gh api "repos/${{ github.repository }}/releases/generate-notes" -f tag_name=$tag --jq .body
+          }
+
+          $verify = @'
+
+---
+
+```
+sha256  __SHA__
+```
+
+بُني من هذا الكوميت على أجهزة GitHub، والسجل مفتوح ويقدر أي أحد أن يفتحه ويقارن البصمة بما نزّله: __RUN__
+
+Built from this commit on GitHub's runners. The build log is public at the link above, so anyone can compare this hash with the file they downloaded.
+'@
+          $verify = $verify.Replace("__SHA__", "${{ steps.hash.outputs.sha256 }}")
+          $verify = $verify.Replace("__RUN__", "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}")
+
+          ($body.TrimEnd() + "`n" + $verify) | Set-Content release-notes.md -Encoding utf8
+
+          gh release create $tag "target/release/badeel.exe#badeel.exe" `
+            --title $title --notes-file release-notes.md --latest
