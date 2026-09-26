@@ -14,6 +14,8 @@
 > **بديل** يبدّل بين حساباتك في ستيم وباتل نت ورايوت وإيبك ويوبيسوفت وروكستار وجوج جالاكسي بضغطة واحدة، بلا أن تكتب كلمة سر، وكل جلسة تُحفظ مشفّرة بمفتاح لا يوجد خارج جهازك.
 >
 > **[الموقع](https://ryanathlawi.github.io/badeel-site/)** · **[كيف يشتغل خطوة بخطوة](https://ryanathlawi.github.io/badeel-site/#/inside)** · **[المخطط الهندسي](https://ryanathlawi.github.io/badeel-site/#/map)** · **[الإصدارات](../../releases)** · **[بلّغ عن مشكلة](../../issues)**
+>
+> **تواصل ودعم:** [ديسكورد](https://discord.gg/H8sq6Uc3kA) · [ادعم التطوير عبر PayPal](https://www.paypal.com/paypalme/RayanAthlawi)
 
 </div>
 

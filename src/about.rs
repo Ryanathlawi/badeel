@@ -62,8 +62,8 @@ pub const PEOPLE: [Person; 2] = [
             ("التصميم", "Design"),
         ],
         hue: 0,
-        support: "",
-        contact: "",
+        support: "https://www.paypal.com/paypalme/RayanAthlawi",
+        contact: "https://discord.gg/H8sq6Uc3kA",
     },
     Person {
         initials: "MA",
