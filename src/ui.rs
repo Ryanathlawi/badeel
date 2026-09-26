@@ -1222,9 +1222,16 @@ pub fn home_platform(
             StrokeKind::Inside,
         );
     }
+    // المواضع محسوبة من ارتفاع البطاقة لا بأرقام ثابتة، فالشبكة تضيّقها
+    // إلى النصف حين تنزل إلى صفّين، وكانت الأيقونة تركب على الاسم
+    let pad = (r.height() * 0.12).clamp(6.0, 14.0);
+    let sub_y = r.bottom() - pad - 5.0;
+    let name_y = sub_y - 15.0;
+    let head = name_y - 9.0 - r.top();
+    let side = (head * 0.78).clamp(17.0, 40.0);
     let icon = Rect::from_center_size(
-        pos2(r.center().x, r.top() + 34.0),
-        vec2(38.0 + 3.0 * hot, 38.0 + 3.0 * hot),
+        pos2(r.center().x, r.top() + pad + side * 0.5),
+        vec2(side + 3.0 * hot, side + 3.0 * hot),
     );
     platform_icon(
         ui,
@@ -1239,14 +1246,14 @@ pub fn home_platform(
     );
     let p = ui.painter();
     p.text(
-        pos2(r.center().x, r.bottom() - 40.0),
+        pos2(r.center().x, name_y),
         Align2::CENTER_CENTER,
         name,
-        FontId::proportional(13.5),
+        FontId::proportional(if r.height() < 78.0 { 12.0 } else { 13.5 }),
         pal.text.gamma_multiply(alpha * (0.82 + 0.18 * hot)),
     );
     p.text(
-        pos2(r.center().x, r.bottom() - 21.0),
+        pos2(r.center().x, sub_y),
         Align2::CENTER_CENTER,
         sub,
         FontId::proportional(10.0),
@@ -1258,7 +1265,7 @@ pub fn home_platform(
     );
     if installed {
         p.circle_filled(
-            pos2(r.right() - 15.0, r.top() + 15.0),
+            pos2(r.right() - pad - 3.0, r.top() + pad + 3.0),
             3.2,
             pal.live.gamma_multiply(alpha),
         );

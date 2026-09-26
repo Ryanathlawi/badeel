@@ -275,6 +275,43 @@ impl App {
             .show("Game account switcher", state, "Website", "Source");
     }
 
+    /// النافذة بلا إطار من النظام، فحوافها لا تُسحب بنفسها. هذه تتكفّل
+    /// بذلك: تتحسّس المؤشر عند الحافة، وتغيّر شكله، وتسلّم ويندوز
+    /// عملية التكبير والتصغير بمجرّد الضغط.
+    fn edge_resize(ctx: &egui::Context) {
+        use egui::{CursorIcon as C, ResizeDirection as D, ViewportCommand};
+        const EDGE: f32 = 6.0;
+
+        let rect = ctx.viewport_rect();
+        let Some(pos) = ctx.pointer_latest_pos() else {
+            return;
+        };
+        if !rect.contains(pos) {
+            return;
+        }
+        let w = pos.x - rect.left() < EDGE;
+        let e = rect.right() - pos.x < EDGE;
+        let n = pos.y - rect.top() < EDGE;
+        let s = rect.bottom() - pos.y < EDGE;
+
+        let (dir, cur) = match (w, e, n, s) {
+            (true, _, true, _) => (D::NorthWest, C::ResizeNwSe),
+            (_, true, _, true) => (D::SouthEast, C::ResizeNwSe),
+            (_, true, true, _) => (D::NorthEast, C::ResizeNeSw),
+            (true, _, _, true) => (D::SouthWest, C::ResizeNeSw),
+            (true, ..) => (D::West, C::ResizeHorizontal),
+            (_, true, ..) => (D::East, C::ResizeHorizontal),
+            (_, _, true, _) => (D::North, C::ResizeVertical),
+            (_, _, _, true) => (D::South, C::ResizeVertical),
+            _ => return,
+        };
+
+        ctx.set_cursor_icon(cur);
+        if ctx.input(|i| i.pointer.primary_pressed()) {
+            ctx.send_viewport_cmd(ViewportCommand::BeginResize(dir));
+        }
+    }
+
     fn pace(&self, ctx: &egui::Context, frame_start: Instant, budget_ms: u64) {
         if budget_ms == 0 {
             ctx.request_repaint_after(std::time::Duration::from_millis(250));
@@ -666,6 +703,7 @@ impl eframe::App for App {
         } else {
             0
         };
+        Self::edge_resize(ctx);
         self.pace(ctx, now, budget);
         let bt = if mo.backdrop { t } else { 0.0 };
         theme::draw_backdrop(root.painter(), root.max_rect(), &self.pal, bt, mo.backdrop);
