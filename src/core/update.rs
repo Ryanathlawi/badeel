@@ -66,6 +66,9 @@ pub fn is_newer(candidate: &str, current: &str) -> bool {
     false
 }
 
+/// ويندوز باورشيل ٥ يرجّع نصًّا لا بايتات حين يكون الرد نصًّا، وتحويل
+/// النص إلى base64 يرمي استثناءً فيفشل الطلب كله. RawContentStream
+/// يعطي البايتات نفسها في الحالتين، نصًّا كان الرد أو ملفًّا.
 fn http_get(url: &str) -> Result<Vec<u8>> {
 
     let mut cmd = std::process::Command::new("powershell.exe");
@@ -79,7 +82,7 @@ fn http_get(url: &str) -> Result<Vec<u8>> {
                 "$ProgressPreference='SilentlyContinue'; \
                  [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; \
                  $r=Invoke-WebRequest -UseBasicParsing -Headers @{{'User-Agent'='badeel'}} -Uri '{url}'; \
-                 [Convert]::ToBase64String($r.Content)"
+                 $b=if($r.RawContentStream){{$r.RawContentStream.ToArray()}}else{{[Text.Encoding]::UTF8.GetBytes([string]$r.Content)}}; \n                 [Convert]::ToBase64String($b)"
             ),
         ])
         .output()

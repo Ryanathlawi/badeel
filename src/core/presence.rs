@@ -57,6 +57,7 @@ impl Presence {
     }
 
     pub fn set_enabled(&mut self, on: bool) {
+        log::info!("discord: set_enabled({on}), was {}", self.on);
         if self.on == on {
             return;
         }
@@ -88,11 +89,16 @@ impl Presence {
         }
         self.last_try = Some(Instant::now());
         let mut c = DiscordIpcClient::new(APP_ID);
-        if c.connect().is_ok() {
-            self.client = Some(c);
-            true
-        } else {
-            false
+        match c.connect() {
+            Ok(()) => {
+                log::info!("discord: connected");
+                self.client = Some(c);
+                true
+            }
+            Err(e) => {
+                log::warn!("discord: connect failed: {e}");
+                false
+            }
         }
     }
 
@@ -127,9 +133,13 @@ impl Presence {
             ]);
 
         match self.client.as_mut().map(|c| c.set_activity(payload)) {
-            Some(Ok(())) => self.shown = Some((details.to_owned(), state.to_owned())),
+            Some(Ok(())) => {
+                log::info!("discord: activity set to {details} / {state}");
+                self.shown = Some((details.to_owned(), state.to_owned()));
+            }
             // انقطع الأنبوب أو أُغلق ديسكورد: نتخلّص من العميل ونعاود لاحقًا
-            _ => {
+            other => {
+                log::warn!("discord: set_activity failed: {other:?}");
                 self.client = None;
                 self.shown = None;
             }

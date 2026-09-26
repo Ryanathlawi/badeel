@@ -1,6 +1,6 @@
 [package]
 name = "badeel"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["Ryan Athlawi", "Moayad Almutairi"]
 description = "بديل — مبدّل حسابات: ستيم، باتل نت، إيبك، رايوت، يوبيسوفت، روكستار، جوج"
