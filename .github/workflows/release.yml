@@ -92,20 +92,21 @@ jobs:
             $body = gh api "repos/${{ github.repository }}/releases/generate-notes" -f tag_name=$tag --jq .body
           }
 
-          $verify = @'
+          # يُبنى سطرًا سطرًا لا كنصّ ممتد، لأن النصّ الممتد في
+          # باورشيل يلزمه أن يبدأ من أول العمود وهذا يكسر مسافات YAML
+          $verify = @(
+            "",
+            "---",
+            "",
+            '```',
+            "sha256  ${{ steps.hash.outputs.sha256 }}",
+            '```',
+            "",
+            "بُني من هذا الكوميت على أجهزة GitHub، والسجل مفتوح يقدر أي أحد أن يفتحه ويقارن البصمة بما نزّله: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+            "",
+            "Built from this commit on GitHub's runners. The build log is public at the link above, so anyone can compare this hash with the file they downloaded."
+          ) -join "`n"
 
----
-
-```
-sha256  __SHA__
-```
-
-بُني من هذا الكوميت على أجهزة GitHub، والسجل مفتوح ويقدر أي أحد أن يفتحه ويقارن البصمة بما نزّله: __RUN__
-
-Built from this commit on GitHub's runners. The build log is public at the link above, so anyone can compare this hash with the file they downloaded.
-'@
-          $verify = $verify.Replace("__SHA__", "${{ steps.hash.outputs.sha256 }}")
-          $verify = $verify.Replace("__RUN__", "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}")
 
           ($body.TrimEnd() + "`n" + $verify) | Set-Content release-notes.md -Encoding utf8
 
