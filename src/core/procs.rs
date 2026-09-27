@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 use sysinfo::{ProcessRefreshKind, RefreshKind, System};
 
-use super::catalog::{Close, Locator, Platform};
+use super::catalog::{Close, Game, Locator, Platform};
 use super::{paths, registry};
 
 const GRACEFUL_WAIT: Duration = Duration::from_secs(8);
@@ -40,6 +40,24 @@ pub fn running(names: &[&str]) -> Vec<String> {
         }
     }
     found
+}
+
+/// أوّل لعبة تعمل الآن من ألعاب هذه المنصّة
+///
+/// رايوت مثلًا يُغلق بالقوة وقائمة عملياته تضمّ فالورانت نفسها، فتبديل
+/// في وسط مباراة كان يقتل اللعبة ويجلب للاعب عقوبة خروج
+pub fn game_running(p: &Platform) -> Option<&'static Game> {
+    if p.games.is_empty() {
+        return None;
+    }
+    let names: Vec<&str> = p.games.iter().map(|g| g.exe).collect();
+    match_game(p.games, &running(&names))
+}
+
+fn match_game<'a>(games: &'a [Game], live: &[String]) -> Option<&'a Game> {
+    games
+        .iter()
+        .find(|g| live.iter().any(|n| n.eq_ignore_ascii_case(g.exe)))
 }
 
 fn taskkill(name: &str, force: bool) {
@@ -142,4 +160,30 @@ pub fn launch(p: &Platform, extra: &[String]) -> anyhow::Result<()> {
     cmd.stdout(Stdio::null()).stderr(Stdio::null());
     cmd.spawn()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::catalog::{PLATFORMS, index_of};
+
+    #[test]
+    fn a_running_game_is_caught_whatever_its_letter_case() {
+        let riot = &PLATFORMS[index_of("riot")];
+        assert!(match_game(riot.games, &[]).is_none());
+        assert!(match_game(riot.games, &["discord.exe".into()]).is_none());
+
+        let hit = match_game(riot.games, &["valorant-win64-shipping.EXE".into()])
+            .expect("caught despite the casing");
+        assert_eq!(hit.ar, "فالورانت");
+
+        // المنصّات التي بلا ألعاب لا تُوقف التبديل
+        assert!(PLATFORMS.iter().all(|p| !p.games.is_empty()));
+    }
+
+    #[test]
+    fn running_sees_a_process_that_always_exists() {
+        assert!(!running(&["explorer.exe"]).is_empty(), "explorer دائمًا يعمل");
+        assert!(running(&["definitely-not-a-real-process.exe"]).is_empty());
+    }
 }

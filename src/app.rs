@@ -460,6 +460,18 @@ impl App {
     }
 
     fn start_switch(&mut self, account_id: String) {
+        // التبديل يُغلق المنصّة بالقوة، ولو كانت مباراة جارية خرج منها
+        // اللاعب وأخذ عقوبة، فيُوقف قبل أن يمسّ شيئًا
+        if let Some(g) = procs::game_running(self.platform) {
+            let rtl = self.settings.lang.rtl();
+            let msg = if rtl {
+                format!("{} شغّالة الآن، أغلقها أولًا", g.name(true))
+            } else {
+                format!("{} is running — close it first", g.name(false))
+            };
+            self.toast(msg, ToastKind::Err);
+            return;
+        }
         let Some(key) = self.key.clone() else {
             self.toast(
                 self.settings.lang.t("افتح القفل أولًا", "Unlock first"),

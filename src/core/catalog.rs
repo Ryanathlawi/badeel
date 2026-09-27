@@ -43,6 +43,19 @@ pub enum Locator {
     },
 }
 
+/// لعبة تُعرف بملفّها، ليسمّيها بديل للمستخدم بدل أن يقول اسم العملية
+pub struct Game {
+    pub exe: &'static str,
+    pub ar: &'static str,
+    pub en: &'static str,
+}
+
+impl Game {
+    pub fn name(&self, arabic: bool) -> &'static str {
+        if arabic { self.ar } else { self.en }
+    }
+}
+
 pub struct Platform {
     pub id: &'static str,
     pub name_ar: &'static str,
@@ -53,6 +66,8 @@ pub struct Platform {
     pub launch_args: &'static [&'static str],
     pub items: &'static [Item],
     pub identity: Identity,
+    /// ألعاب هذه المنصّة، يفحصها بديل قبل التبديل فلا يقطع مباراة جارية
+    pub games: &'static [Game],
 }
 
 impl Platform {
@@ -80,6 +95,14 @@ pub const PLATFORMS: &[Platform] = &[
         launch_args: &[],
         items: &[],
         identity: Identity::Steam,
+        games: &[
+            Game { exe: "cs2.exe", ar: "كاونتر سترايك 2", en: "Counter-Strike 2" },
+            Game { exe: "dota2.exe", ar: "دوتا 2", en: "Dota 2" },
+            Game { exe: "r5apex.exe", ar: "أيبكس ليجندز", en: "Apex Legends" },
+            Game { exe: "r5apex_dx12.exe", ar: "أيبكس ليجندز", en: "Apex Legends" },
+            Game { exe: "RustClient.exe", ar: "رست", en: "Rust" },
+            Game { exe: "TslGame.exe", ar: "ببجي", en: "PUBG" },
+        ],
     },
     Platform {
         id: "battlenet",
@@ -103,6 +126,13 @@ pub const PLATFORMS: &[Platform] = &[
         launch_args: &[],
         items: &[],
         identity: Identity::Bnet,
+        games: &[
+            Game { exe: "Overwatch.exe", ar: "أوفرواتش", en: "Overwatch" },
+            Game { exe: "Diablo IV.exe", ar: "ديابلو 4", en: "Diablo IV" },
+            Game { exe: "Wow.exe", ar: "وورلد أوف ووركرافت", en: "World of Warcraft" },
+            Game { exe: "SC2_x64.exe", ar: "ستاركرافت 2", en: "StarCraft II" },
+            Game { exe: "Hearthstone.exe", ar: "هيرثستون", en: "Hearthstone" },
+        ],
     },
     Platform {
         id: "riot",
@@ -136,6 +166,12 @@ pub const PLATFORMS: &[Platform] = &[
             Item::Dir(r"%LOCALAPPDATA%\Riot Games\Riot Client\Data\Cookies"),
         ],
         identity: Identity::Marker(r"%LOCALAPPDATA%\Riot Games\Riot Client\Data\.badeel-id"),
+        games: &[
+            Game { exe: "VALORANT.exe", ar: "فالورانت", en: "VALORANT" },
+            Game { exe: "VALORANT-Win64-Shipping.exe", ar: "فالورانت", en: "VALORANT" },
+            Game { exe: "League of Legends.exe", ar: "ليق أوف ليجندز", en: "League of Legends" },
+            Game { exe: "LoR.exe", ar: "ليجندز أوف رونتيرا", en: "Legends of Runeterra" },
+        ],
     },
     Platform {
         id: "epic",
@@ -158,6 +194,10 @@ pub const PLATFORMS: &[Platform] = &[
         identity: Identity::Marker(
             r"%LOCALAPPDATA%\EpicGamesLauncher\Saved\Config\Windows\.badeel-id",
         ),
+        games: &[
+            Game { exe: "FortniteClient-Win64-Shipping.exe", ar: "فورتنايت", en: "Fortnite" },
+            Game { exe: "RocketLeague.exe", ar: "روكيت ليق", en: "Rocket League" },
+        ],
     },
     Platform {
         id: "ubisoft",
@@ -194,6 +234,11 @@ pub const PLATFORMS: &[Platform] = &[
             Item::File(r"%LOCALAPPDATA%\Ubisoft Game Launcher\settings.yaml"),
         ],
         identity: Identity::Marker(r"%LOCALAPPDATA%\Ubisoft Game Launcher\.badeel-id"),
+        games: &[
+            Game { exe: "RainbowSix.exe", ar: "رينبو سكس سيج", en: "Rainbow Six Siege" },
+            Game { exe: "ACValhalla.exe", ar: "أساسنز كريد فالهالا", en: "Assassin's Creed Valhalla" },
+            Game { exe: "FarCry6.exe", ar: "فار كراي 6", en: "Far Cry 6" },
+        ],
     },
     Platform {
         id: "rockstar",
@@ -223,6 +268,11 @@ pub const PLATFORMS: &[Platform] = &[
             Item::File(r"%LOCALAPPDATA%\Rockstar Games\Launcher\CrashLogs\settings.dat"),
         ],
         identity: Identity::Marker(r"%LOCALAPPDATA%\Rockstar Games\Launcher\.badeel-id"),
+        games: &[
+            Game { exe: "GTA5.exe", ar: "جي تي ايه 5", en: "GTA V" },
+            Game { exe: "GTA5_Enhanced.exe", ar: "جي تي ايه 5", en: "GTA V" },
+            Game { exe: "RDR2.exe", ar: "ريد ديد ريدمبشن 2", en: "Red Dead Redemption 2" },
+        ],
     },
     Platform {
         id: "gog",
@@ -252,6 +302,10 @@ pub const PLATFORMS: &[Platform] = &[
             Item::Reg(r"HKCU\Software\GOG.com\Galaxy\settings", "username"),
         ],
         identity: Identity::Marker(r"%LOCALAPPDATA%\GOG.com\Galaxy\Configuration\.badeel-id"),
+        games: &[
+            Game { exe: "Cyberpunk2077.exe", ar: "سايبربانك 2077", en: "Cyberpunk 2077" },
+            Game { exe: "witcher3.exe", ar: "ذا ويتشر 3", en: "The Witcher 3" },
+        ],
     },
 ];
 
