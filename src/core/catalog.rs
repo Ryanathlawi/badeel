@@ -8,21 +8,21 @@ pub enum Close {
 pub enum Item {
     File(&'static str),
     Dir(&'static str),
-    Json {
-        file: &'static str,
-        key: &'static str,
-    },
     Reg(&'static str, &'static str),
 }
 
 #[derive(Clone, Copy, Debug)]
 pub enum Identity {
     Marker(&'static str),
-    JsonFirstOf {
-        file: &'static str,
-        key: &'static str,
-    },
     Steam,
+    Bnet,
+}
+
+impl Identity {
+    /// المنصّة نفسها تحفظ قائمة حساباتها، فيقرأها بديل ولا ينسخ لها ملفات
+    pub fn own_list(&self) -> bool {
+        matches!(self, Identity::Steam | Identity::Bnet)
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -101,14 +101,8 @@ pub const PLATFORMS: &[Platform] = &[
             Locator::Path(r"%ProgramFiles%\Battle.net\Battle.net.exe"),
         ],
         launch_args: &[],
-        items: &[Item::Json {
-            file: r"%APPDATA%\Battle.net\Battle.net.config",
-            key: "Client.SavedAccountNames",
-        }],
-        identity: Identity::JsonFirstOf {
-            file: r"%APPDATA%\Battle.net\Battle.net.config",
-            key: "Client.SavedAccountNames",
-        },
+        items: &[],
+        identity: Identity::Bnet,
     },
     Platform {
         id: "riot",
@@ -268,7 +262,7 @@ pub fn index_of(id: &str) -> usize {
 impl Item {
     pub fn raw_path(&self) -> Option<&'static str> {
         match self {
-            Item::File(p) | Item::Dir(p) | Item::Json { file: p, .. } => Some(p),
+            Item::File(p) | Item::Dir(p) => Some(p),
             Item::Reg(..) => None,
         }
     }
@@ -279,7 +273,6 @@ impl Item {
                 let leaf = p.rsplit(['\\', '/']).next().unwrap_or("item");
                 format!("{index:02}-{}", super::paths::sanitize(leaf))
             }
-            Item::Json { key, .. } => format!("{index:02}-json-{}", super::paths::sanitize(key)),
             Item::Reg(key, value) => format!(
                 "{index:02}-reg-{}",
                 super::paths::sanitize(&format!("{key}-{value}"))
@@ -297,7 +290,7 @@ mod tests {
         for p in PLATFORMS {
             assert!(!p.locate.is_empty(), "{}", p.id);
             assert!(!p.exes.is_empty(), "{}", p.id);
-            if !matches!(p.identity, Identity::Steam) {
+            if !p.identity.own_list() {
                 assert!(!p.items.is_empty(), "{}", p.id);
             }
         }

@@ -2,11 +2,10 @@ use std::fs;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use serde_json::Value;
 
 use super::catalog::{Identity, Item, Platform};
 use super::vault::VaultKey;
-use super::{fsops, jsonpath, paths, procs, steam, store, vault};
+use super::{bnet, fsops, paths, procs, steam, store, vault};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Step {
@@ -24,14 +23,8 @@ pub fn current_id(p: &Platform) -> Option<String> {
             let s = s.trim().to_string();
             (!s.is_empty()).then_some(s)
         }
-        Identity::JsonFirstOf { file, key } => {
-            let raw = fs::read_to_string(paths::expand(file)).ok()?;
-            let json: Value = serde_json::from_str(&raw).ok()?;
-            let list = jsonpath::get(&json, key)?.as_str()?;
-            let first = list.split(',').next()?.trim().to_string();
-            (!first.is_empty()).then_some(first)
-        }
         Identity::Steam => steam::current_account().ok().flatten(),
+        Identity::Bnet => bnet::current_account(),
     }
 }
 
@@ -57,20 +50,6 @@ pub fn capture(p: &Platform, account_id: &str, key: &VaultKey) -> Result<()> {
                 vault::seal_path(key, &live, &staged)
                     .with_context(|| format!("حفظ {}", live.display()))?;
                 fsops::swap_in(&staged, &dest)?;
-            }
-            Item::Json {
-                file,
-                key: json_key,
-            } => {
-                let live = paths::expand(file);
-                let value = fs::read_to_string(&live)
-                    .ok()
-                    .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
-                    .and_then(|json| jsonpath::get(&json, json_key).cloned());
-                match value {
-                    Some(v) => key.write_file(&dest, &serde_json::to_vec(&v)?)?,
-                    None => fsops::remove_any(&dest)?,
-                }
             }
             Item::Reg(reg_key, reg_value) => {
                 match super::registry::read(reg_key, reg_value)? {
@@ -116,22 +95,6 @@ pub fn apply(p: &Platform, account_id: &str, key: &VaultKey) -> Result<()> {
                         .with_context(|| format!("تحضير {}", live.display()))?;
                     fsops::swap_in(&staged, &live)
                         .with_context(|| format!("تركيب {}", live.display()))?;
-                }
-                Item::Json { file, key: json_key } => {
-                    let live = paths::expand(file);
-                    if !src.exists() {
-                        continue;
-                    }
-                    let bytes = key.read_file(&src)?;
-                    let value: Value = serde_json::from_slice(&bytes)?;
-                    let mut json: Value = fs::read_to_string(&live)
-                        .ok()
-                        .and_then(|raw| serde_json::from_str(&raw).ok())
-                        .unwrap_or_else(|| Value::Object(serde_json::Map::new()));
-                    jsonpath::set(&mut json, json_key, value);
-                    let staged = paths::temp_sibling(&live, "new");
-                    fs::write(&staged, serde_json::to_vec_pretty(&json)?)?;
-                    fsops::swap_in(&staged, &live)?;
                 }
                 Item::Reg(reg_key, reg_value) => {
                     if !src.exists() {
@@ -204,9 +167,12 @@ pub fn switch_to(
     on_step(Step::Closing);
     procs::close_all(p.exes, p.close)?;
 
-    if matches!(p.identity, Identity::Steam) {
+    if p.identity.own_list() {
         on_step(Step::Restoring);
-        steam::select_account(target_id, skip_steam_chooser)?;
+        match p.identity {
+            Identity::Bnet => bnet::select_account(target_id)?,
+            _ => steam::select_account(target_id, skip_steam_chooser)?,
+        }
     } else {
 
         if let Some(cur) = current.as_deref() {
@@ -250,7 +216,7 @@ pub fn add_current(p: &Platform, name: &str, key: &VaultKey) -> Result<store::Ac
     index.upsert(acc.clone());
     store::save(p.id, &index)?;
 
-    if !matches!(p.identity, Identity::Steam) {
+    if !p.identity.own_list() {
         write_marker(p, &id)?;
         capture(p, &id, key)?;
     }

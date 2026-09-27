@@ -9,7 +9,7 @@ use crate::core::update::{self, Progress};
 use crate::core::vault::{self, VaultKey};
 use crate::about;
 use crate::core::profile::{self, Book};
-use crate::core::{paths, presence, procs, steam, store, switch};
+use crate::core::{bnet, paths, presence, procs, steam, store, switch};
 use crate::i18n::Lang;
 use crate::motion::{self, Motion, back_out, ease_out};
 use crate::showcase::{self, Showcase};
@@ -370,6 +370,27 @@ impl App {
                             steam::avatar_path(&acc.id).map(|p| p.to_string_lossy().to_string());
                     }
                 }
+                let _ = store::save(self.platform.id, &self.accounts);
+            }
+        }
+        if matches!(self.platform.identity, catalog::Identity::Bnet) {
+            let mut fresh = false;
+            for email in bnet::accounts() {
+                if self.accounts.get(&email).is_some() {
+                    continue;
+                }
+                let name = email.split('@').next().unwrap_or(&email).to_string();
+                self.accounts.upsert(store::Account {
+                    id: email.clone(),
+                    name,
+                    note: email,
+                    avatar: None,
+                    last_used: 0,
+                    uses: 0,
+                });
+                fresh = true;
+            }
+            if fresh {
                 let _ = store::save(self.platform.id, &self.accounts);
             }
         }
@@ -2074,7 +2095,12 @@ impl App {
             p.text(
                 pos2(inner.center().x, inner.center().y + 22.0),
                 Align2::CENTER_CENTER,
-                if none_saved {
+                if none_saved && self.platform.identity.own_list() {
+                    lang.t(
+                        "سجّل دخولك في المنصّة كالمعتاد وبديل يتعرّف على حساباتك وحده",
+                        "Sign in on the platform as usual and badeel finds your accounts by itself",
+                    )
+                } else if none_saved {
                     lang.t(
                         "سجّل دخولك في المنصّة كالمعتاد، ثم اضغط «أضف الحساب الحالي»",
                         "Sign in on the platform as usual, then press Add current account",
