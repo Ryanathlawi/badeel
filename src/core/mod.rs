@@ -1,4 +1,5 @@
 pub mod bnet;
+pub mod board;
 pub mod catalog;
 pub mod clock;
 pub mod fsops;

@@ -1,0 +1,40 @@
+{
+  "cards": [
+    {
+      "id": "dropship",
+      "platforms": ["battlenet"],
+      "badge": { "ar": "من أثلاوي", "en": "Also from Athlawi" },
+      "title": { "ar": "دروبشيب", "en": "dropship" },
+      "body": {
+        "ar": "يحجب مجموعة سيرفرات بضغطة واحدة فتلعب على السيرفر الذي تريده، بخريطة عالم حيّة وبينق يتجدّد كل ثوانٍ، وعربي كامل من اليمين إلى اليسار.",
+        "en": "Blocks a whole set of servers in one press so you play on the region you want, with a live world map and ping refreshing every few seconds."
+      },
+      "cta": { "ar": "شوفه", "en": "Take a look" },
+      "url": "https://ryanathlawi.github.io/dropship-site/"
+    },
+    {
+      "id": "why",
+      "platforms": [],
+      "badge": { "ar": "", "en": "" },
+      "title": { "ar": "بدّل وارجع للّعب", "en": "Switch and get back to the game" },
+      "body": {
+        "ar": "كل ثانية تقضيها في تسجيل الدخول ثانية لم تلعبها، وهذا وحده سبب وجود بديل.",
+        "en": "Every second spent signing in is a second not spent playing, and that alone is why badeel exists."
+      },
+      "cta": { "ar": "", "en": "" },
+      "url": ""
+    },
+    {
+      "id": "share",
+      "platforms": [],
+      "badge": { "ar": "", "en": "" },
+      "title": { "ar": "عجبك بديل؟", "en": "Liking badeel?" },
+      "body": {
+        "ar": "أرسل الرابط لمن تعرفه يلعب بحسابين، فهذا كل ما نطلبه مقابله.",
+        "en": "Send the link to someone you know who plays on two accounts, that is all we ask for it."
+      },
+      "cta": { "ar": "افتح الموقع", "en": "Open the site" },
+      "url": "https://ryanathlawi.github.io/badeel-site/"
+    }
+  ]
+}

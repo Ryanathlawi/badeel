@@ -2378,3 +2378,130 @@ pub fn panel_card(painter: &egui::Painter, rect: Rect, pal: &Palette) {
         StrokeKind::Inside,
     );
 }
+
+/// بطاقة اللوحة: شارة صغيرة وعنوان ونصّ، ويُرجع صحيحًا إن نُقرت ولها رابط
+///
+/// تُرسم بلغة البطاقات نفسها في البرنامج، فلا تبدو لافتة دخيلة عليه
+#[allow(clippy::too_many_arguments)]
+pub fn promo_card(
+    ui: &mut egui::Ui,
+    rect: Rect,
+    pal: &Palette,
+    rtl: bool,
+    tint: Color32,
+    badge: &str,
+    title: &str,
+    body: &str,
+    cta: &str,
+    alpha: f32,
+) -> bool {
+    if alpha <= 0.004 || rect.height() < 34.0 {
+        return false;
+    }
+    let clickable = !cta.trim().is_empty();
+    let id = egui::Id::new("promo").with(title);
+    let res = ui.interact(
+        rect,
+        id,
+        if clickable {
+            Sense::click()
+        } else {
+            Sense::hover()
+        },
+    );
+    let lift = if clickable && res.hovered() { 1.0 } else { 0.0 };
+    if clickable && res.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+
+    let p = ui.painter();
+    p.rect_filled(rect, 16.0, pal.panel_hi.gamma_multiply((0.5 + lift * 0.3) * alpha));
+    p.rect_stroke(
+        rect,
+        16.0,
+        egui::Stroke::new(
+            1.0,
+            tint.gamma_multiply((0.26 + lift * 0.3) * alpha),
+        ),
+        StrokeKind::Inside,
+    );
+    // شريط رقيق على حافة البداية يربطها بلون المنصّة
+    let edge = if rtl {
+        Rect::from_min_max(rect.right_top() - vec2(3.0, 0.0), rect.right_bottom())
+    } else {
+        Rect::from_min_max(rect.left_top(), rect.left_bottom() + vec2(3.0, 0.0))
+    };
+    p.rect_filled(edge.shrink2(vec2(0.0, 12.0)), 2.0, tint.gamma_multiply(0.85 * alpha));
+
+    let pad = 12.0;
+    let x = if rtl { rect.right() - pad } else { rect.left() + pad };
+    let anchor = if rtl { Align2::RIGHT_TOP } else { Align2::LEFT_TOP };
+    let mut y = rect.top() + 9.0;
+
+    if !badge.trim().is_empty() {
+        p.text(
+            pos2(x, y),
+            anchor,
+            badge,
+            FontId::proportional(9.5),
+            tint.gamma_multiply(0.95 * alpha),
+        );
+        y += 13.0;
+    }
+    p.text(
+        pos2(x, y),
+        anchor,
+        title,
+        FontId::proportional(13.0),
+        pal.text.gamma_multiply(alpha),
+    );
+    y += 18.0;
+
+    let wrap = rect.width() - pad * 2.0;
+    let room = rect.bottom() - y - if clickable { 26.0 } else { 8.0 };
+    if !body.trim().is_empty() && room > 10.0 {
+        let galley = p.layout(
+            body.to_string(),
+            FontId::proportional(10.5),
+            pal.muted.gamma_multiply(0.95 * alpha),
+            wrap,
+        );
+        let at = if rtl {
+            pos2(x - galley.size().x, y)
+        } else {
+            pos2(x, y)
+        };
+        // نصّ اللوحة يُكتب من بعيد، فقد يطول أكثر من البطاقة، فيُقصّ
+        // على ما يتّسع بدل أن يسقط كلّه ويبقى العنوان وحده
+        let shown = galley.size().y.min(room);
+        p.with_clip_rect(Rect::from_min_size(
+            pos2(rect.left(), y),
+            vec2(rect.width(), shown),
+        ))
+        .galley(at, galley, pal.muted);
+        y += shown + 6.0;
+    }
+
+    if clickable && y + 16.0 <= rect.bottom() {
+        let g = p.layout_no_wrap(
+            cta.to_string(),
+            FontId::proportional(10.5),
+            tint.gamma_multiply(alpha),
+        );
+        let w = g.size().x + 20.0;
+        let r = Rect::from_min_size(
+            pos2(if rtl { x - w } else { x }, y),
+            vec2(w, 20.0),
+        );
+        p.rect_filled(r, 999.0, tint.gamma_multiply((0.16 + lift * 0.14) * alpha));
+        p.text(
+            r.center(),
+            Align2::CENTER_CENTER,
+            cta,
+            FontId::proportional(10.5),
+            tint.gamma_multiply(alpha),
+        );
+    }
+
+    clickable && res.clicked()
+}

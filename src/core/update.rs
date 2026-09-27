@@ -105,7 +105,7 @@ pub fn is_newer(candidate: &str, current: &str) -> bool {
 /// ويندوز باورشيل ٥ يرجّع نصًّا لا بايتات حين يكون الرد نصًّا، وتحويل
 /// النص إلى base64 يرمي استثناءً فيفشل الطلب كله. RawContentStream
 /// يعطي البايتات نفسها في الحالتين، نصًّا كان الرد أو ملفًّا.
-fn http_get(url: &str) -> Result<Vec<u8>> {
+pub fn http_get(url: &str) -> Result<Vec<u8>> {
 
     let mut cmd = std::process::Command::new("powershell.exe");
     super::procs::hidden(&mut cmd);

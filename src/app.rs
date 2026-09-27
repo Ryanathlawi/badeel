@@ -9,7 +9,7 @@ use crate::core::update::{self, Progress};
 use crate::core::vault::{self, VaultKey};
 use crate::about;
 use crate::core::profile::{self, Book};
-use crate::core::{bnet, paths, presence, procs, steam, store, switch};
+use crate::core::{bnet, board, paths, presence, procs, steam, store, switch};
 use crate::i18n::Lang;
 use crate::motion::{self, Motion, back_out, ease_out};
 use crate::showcase::{self, Showcase};
@@ -45,6 +45,8 @@ pub struct Settings {
     pub auto_update: bool,
     #[serde(default)]
     pub discord: bool,
+    #[serde(default = "yes")]
+    pub board: bool,
 }
 
 fn yes() -> bool {
@@ -68,6 +70,7 @@ impl Default for Settings {
             lock_on_minimize: false,
             auto_update: true,
             discord: false,
+            board: true,
         }
     }
 }
@@ -167,6 +170,8 @@ pub struct App {
     search: String,
     refresh_at: Instant,
     presence: presence::Presence,
+    board: board::Board,
+    board_rx: Option<Receiver<anyhow::Result<board::Board>>>,
 }
 
 impl App {
@@ -248,9 +253,14 @@ impl App {
             search: String::new(),
             refresh_at: Instant::now(),
             presence: presence::Presence::new(),
+            board: board::load(),
+            board_rx: None,
         };
         app.picking = app.book.profiles.len() > 1;
         app.presence.set_enabled(app.settings.discord);
+        if app.settings.board {
+            app.fetch_board();
+        }
         app.reload();
         app
     }
@@ -339,6 +349,31 @@ impl App {
         self.accent = Accent::from_index(self.book.current().accent);
         self.pal = theme::palette(self.accent);
         theme::apply(ctx, self.accent);
+    }
+
+    /// يجلب اللوحة في خيط مستقل، فلا ينتظرها الفتح ولا يعطّلها انقطاع الشبكة
+    fn fetch_board(&mut self) {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(board::refresh());
+        });
+        self.board_rx = Some(rx);
+    }
+
+    fn poll_board(&mut self) {
+        let Some(rx) = &self.board_rx else { return };
+        match rx.try_recv() {
+            Ok(Ok(b)) => {
+                self.board = b;
+                self.board_rx = None;
+            }
+            Ok(Err(e)) => {
+                log::warn!("لم تصل اللوحة ({e:#}) — تبقى النسخة المحفوظة");
+                self.board_rx = None;
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            Err(_) => self.board_rx = None,
+        }
     }
 
     fn reload(&mut self) {
@@ -725,6 +760,7 @@ impl eframe::App for App {
         }
 
         self.poll_jobs(ctx);
+        self.poll_board();
         self.hotkeys(root);
         self.guard(ctx);
 
@@ -1254,6 +1290,21 @@ impl App {
         let mut want_add = false;
         let mut action: Option<(String, u8)> = None;
         let mut search = std::mem::take(&mut self.search);
+        let promo: Option<[String; 5]> = self
+            .settings
+            .board
+            .then(|| board::pick(&self.board, plat_id, store::now_secs()))
+            .flatten()
+            .map(|c| {
+                [
+                    c.badge.t(rtl).to_string(),
+                    c.title.t(rtl).to_string(),
+                    c.body.t(rtl).to_string(),
+                    c.cta.t(rtl).to_string(),
+                    c.url.clone(),
+                ]
+            });
+        let mut open_link: Option<String> = None;
 
         let panel = if rtl {
             egui::Panel::right("list")
@@ -1351,9 +1402,16 @@ impl App {
 
                         let btn_h = 46.0;
                         let avail = ui.available_rect_before_wrap();
+                        // اللوحة تأخذ شريحتها من الأسفل، ولا تظهر إلا إن بقي
+                        // للقائمة متّسع فلا تزحمها على الشاشات القصيرة
+                        let card = promo.as_ref().filter(|_| avail.height() > 320.0);
+                        let card_h = if card.is_some() { 122.0 } else { 0.0 };
                         let list_rect = Rect::from_min_size(
                             avail.min,
-                            vec2(avail.width(), (avail.height() - btn_h - 14.0).max(60.0)),
+                            vec2(
+                                avail.width(),
+                                (avail.height() - btn_h - 14.0 - card_h).max(60.0),
+                            ),
                         );
                         ui.scope_builder(egui::UiBuilder::new().max_rect(list_rect), |ui| {
                             if accounts.is_empty() {
@@ -1388,6 +1446,31 @@ impl App {
                                 });
                         });
 
+                        if let Some([badge, title, body, cta, url]) = card {
+                            let r = Rect::from_min_size(
+                                pos2(
+                                    outer.left() + 14.0,
+                                    outer.bottom() - 14.0 - btn_h - 10.0 - (card_h - 10.0),
+                                ),
+                                vec2(outer.width() - 28.0, card_h - 10.0),
+                            );
+                            if ui::promo_card(
+                                ui,
+                                r,
+                                &pal,
+                                rtl,
+                                platform_color(plat_id),
+                                badge,
+                                title,
+                                body,
+                                cta,
+                                ease_out(self.list_in),
+                            ) && !url.is_empty()
+                            {
+                                open_link = Some(url.clone());
+                            }
+                        }
+
                         let brect = Rect::from_min_size(
                             pos2(outer.left() + 14.0, outer.bottom() - 14.0 - btn_h),
                             vec2(outer.width() - 28.0, btn_h),
@@ -1414,6 +1497,9 @@ impl App {
             });
 
         self.search = search;
+        if let Some(url) = open_link {
+            let _ = std::process::Command::new("explorer.exe").arg(url).spawn();
+        }
         if want_add {
             self.dialog = Dialog::AddAccount {
                 name: String::new(),
@@ -2382,6 +2468,7 @@ impl App {
         let mut toggle_showcase = false;
         let mut toggle_mask = false;
         let mut toggle_discord = false;
+        let mut toggle_board = false;
         let mut toggle_minlock = false;
         let mut toggle_autoupd = false;
         let mut want_lang = false;
@@ -2975,6 +3062,19 @@ impl App {
                                     ) {
                                         toggle_discord = true;
                                     }
+                                    if ui::toggle(
+                                        ui,
+                                        &pal,
+                                        rtl,
+                                        lang.t("لوحة أثلاوي", "Athlawi's board"),
+                                        lang.t(
+                                            "بطاقة صغيرة فيها كلمة أو عمل آخر لريان، تُقرأ من موقعه ولا تُرسل من جهازك شيئًا",
+                                            "A small card with a word or another of Ryan's works, read from his site and sending nothing from your PC",
+                                        ),
+                                        self.settings.board,
+                                    ) {
+                                        toggle_board = true;
+                                    }
                                     if ui::setting_row(
                                         ui,
                                         &pal,
@@ -3117,6 +3217,12 @@ impl App {
         if toggle_discord {
             self.settings.discord = !self.settings.discord;
             self.presence.set_enabled(self.settings.discord);
+        }
+        if toggle_board {
+            self.settings.board = !self.settings.board;
+            if self.settings.board && self.board_rx.is_none() {
+                self.fetch_board();
+            }
         }
         if toggle_mask {
             self.settings.mask_ids = !self.settings.mask_ids;
