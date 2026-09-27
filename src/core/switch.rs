@@ -28,6 +28,21 @@ pub fn current_id(p: &Platform) -> Option<String> {
     }
 }
 
+/// هل في المنصّة جلسة قائمة الآن؟ ملفّات الجلسة موجودة وفيها شيء
+/// تُسأل عن المنصّات التي لا تحفظ قائمة حسابات، فهي لا تُعرف إلا بملفّاتها
+pub fn session_live(p: &Platform) -> bool {
+    p.items.iter().any(|item| match item {
+        Item::File(path) => paths::expand(path)
+            .metadata()
+            .is_ok_and(|m| m.len() > 0),
+        Item::Dir(path) => paths::expand(path).is_dir(),
+        Item::Reg(key, value) => super::registry::read(key, value)
+            .ok()
+            .flatten()
+            .is_some(),
+    })
+}
+
 fn account_slot(p: &Platform, account_id: &str, index: usize, item: &Item) -> PathBuf {
     paths::account_dir(p.id, account_id).join(item.slot(index))
 }

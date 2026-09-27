@@ -422,6 +422,25 @@ impl App {
         self.selected = None;
         self.search.clear();
         self.reload();
+        self.offer_current();
+    }
+
+    /// ستيم وباتل نت يحفظان قائمة حساباتهما فيقرأها بديل وحده، وبقية المنصّات
+    /// لا تحفظ إلا جلسة واحدة بلا اسم، فأقرب ما يشبه ذلك أن يرى بديل الجلسة
+    /// القائمة عند أول زيارة ويطلب لها اسمًا بدل أن ينتظر المستخدم يبحث عن الزر
+    fn offer_current(&mut self) {
+        if self.platform.identity.own_list()
+            || self.key.is_none()
+            || !matches!(self.dialog, Dialog::None)
+            || !self.accounts.accounts.is_empty()
+            || !switch::session_live(self.platform)
+        {
+            return;
+        }
+        self.dialog = Dialog::AddAccount {
+            name: String::new(),
+            error: String::new(),
+        };
     }
 
     fn ask_switch(&mut self, account_id: String) {
