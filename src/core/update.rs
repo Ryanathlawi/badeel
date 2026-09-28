@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender, channel};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use serde::Deserialize;
 
 pub const REPO: &str = "Ryanathlawi/badeel";
@@ -105,32 +105,109 @@ pub fn is_newer(candidate: &str, current: &str) -> bool {
 /// ويندوز باورشيل ٥ يرجّع نصًّا لا بايتات حين يكون الرد نصًّا، وتحويل
 /// النص إلى base64 يرمي استثناءً فيفشل الطلب كله. RawContentStream
 /// يعطي البايتات نفسها في الحالتين، نصًّا كان الرد أو ملفًّا.
+/// طلب GET بمكتبة ويندوز نفسها WinHTTP، ويمرّ منه فحص التحديث واللوحة وتنزيل
+/// النسخة الجديدة كلها
+///
+/// كان يمرّ عبر باورشيل مخفي يحمّل ثم يحوّل ما حمّله إلى base64، ثم يستبدل
+/// البرنامج نفسه بما نزل، وهذه السلسلة بعينها نمط برامج التنزيل الخبيثة، فكانت
+/// حماية ويندوز تحذف بديل فجأة عند من سحابتها مفعّلة، وWinHTTP هو ما يستعمله
+/// أي برنامج عادي، ويحترم بروكسي الجهاز ويتبع تحويلات GitHub وحده
+#[cfg(target_os = "windows")]
 pub fn http_get(url: &str) -> Result<Vec<u8>> {
+    use std::ffi::c_void;
+    use windows::Win32::Networking::WinHttp::*;
+    use windows::core::{HSTRING, PCWSTR, w};
 
-    let mut cmd = std::process::Command::new("powershell.exe");
-    super::procs::hidden(&mut cmd);
-    let out = cmd
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            &format!(
-                "$ProgressPreference='SilentlyContinue'; \
-                 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; \
-                 $r=Invoke-WebRequest -UseBasicParsing -Headers @{{'User-Agent'='badeel'}} -Uri '{url}'; \
-                 $b=if($r.RawContentStream){{$r.RawContentStream.ToArray()}}else{{[Text.Encoding]::UTF8.GetBytes([string]$r.Content)}}; \n                 [Convert]::ToBase64String($b)"
-            ),
-        ])
-        .output()
-        .context("تعذّر تنفيذ طلب الشبكة")?;
-    if !out.status.success() {
-        bail!("فشل الاتصال بالخادم");
+    /// المقبض يُغلق متى خرج من مداه، ولو خرجنا بخطأ في منتصف الطريق
+    struct Handle(*mut c_void);
+    impl Drop for Handle {
+        fn drop(&mut self) {
+            unsafe {
+                let _ = WinHttpCloseHandle(self.0);
+            }
+        }
     }
-    let b64: String = String::from_utf8_lossy(&out.stdout)
-        .chars()
-        .filter(|c| !c.is_whitespace())
-        .collect();
-    super::vault::b64_decode(&b64)
+    fn held(h: *mut c_void) -> Result<Handle> {
+        if h.is_null() {
+            Err(windows::core::Error::from_thread()).context("تعذّر الاتصال بالخادم")
+        } else {
+            Ok(Handle(h))
+        }
+    }
+
+    let rest = url.strip_prefix("https://").context("رابط غير مدعوم")?;
+    let (host, path) = match rest.find('/') {
+        Some(i) => (&rest[..i], &rest[i..]),
+        None => (rest, "/"),
+    };
+
+    unsafe {
+        let session = held(WinHttpOpen(
+            w!("badeel"),
+            WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+            PCWSTR::null(),
+            PCWSTR::null(),
+            0,
+        ))?;
+        WinHttpSetTimeouts(session.0, 15_000, 15_000, 30_000, 60_000)?;
+        let connect = held(WinHttpConnect(
+            session.0,
+            &HSTRING::from(host),
+            INTERNET_DEFAULT_HTTPS_PORT,
+            0,
+        ))?;
+        let request = held(WinHttpOpenRequest(
+            connect.0,
+            w!("GET"),
+            &HSTRING::from(path),
+            PCWSTR::null(),
+            PCWSTR::null(),
+            std::ptr::null(),
+            WINHTTP_FLAG_SECURE,
+        ))?;
+        WinHttpSendRequest(request.0, None, None, 0, 0, 0).context("فشل الاتصال بالخادم")?;
+        WinHttpReceiveResponse(request.0, std::ptr::null_mut()).context("فشل الاتصال بالخادم")?;
+
+        let mut status = 0u32;
+        let mut len = std::mem::size_of::<u32>() as u32;
+        WinHttpQueryHeaders(
+            request.0,
+            WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+            PCWSTR::null(),
+            Some(&mut status as *mut u32 as *mut c_void),
+            &mut len,
+            std::ptr::null_mut(),
+        )?;
+        anyhow::ensure!(status == 200, "رد الخادم {status}");
+
+        let mut out = Vec::new();
+        loop {
+            let mut avail = 0u32;
+            WinHttpQueryDataAvailable(request.0, &mut avail)?;
+            if avail == 0 {
+                break;
+            }
+            let start = out.len();
+            out.resize(start + avail as usize, 0);
+            let mut read = 0u32;
+            WinHttpReadData(
+                request.0,
+                out[start..].as_mut_ptr() as *mut c_void,
+                avail,
+                &mut read,
+            )?;
+            out.truncate(start + read as usize);
+            if read == 0 {
+                break;
+            }
+        }
+        Ok(out)
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn http_get(_url: &str) -> Result<Vec<u8>> {
+    anyhow::bail!("الشبكة غير مدعومة على هذا النظام")
 }
 
 pub fn check() -> Result<Option<Available>> {

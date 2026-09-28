@@ -12,7 +12,7 @@ const FORCE_WAIT: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(150);
 
 /// ويندوز يفتح نافذة طرفية سوداء لكل برنامج طرفية يُشغَّل من برنامج
-/// رسومي، فنمنعها. هذا سبب ظهور نافذة بور شيل عند بدء التشغيل.
+/// رسومي، فنمنعها عن taskkill حين يُغلق المنصّة
 #[cfg(windows)]
 pub fn hidden(cmd: &mut Command) -> &mut Command {
     use std::os::windows::process::CommandExt;
