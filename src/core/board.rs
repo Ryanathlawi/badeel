@@ -16,7 +16,7 @@ use super::paths;
 const URL: &str = "https://ryanathlawi.github.io/badeel-site/board.json";
 const BUNDLED: &str = include_str!("../../assets/board.json");
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct Say {
     #[serde(default)]
     pub ar: String,
@@ -30,7 +30,7 @@ impl Say {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct Card {
     #[serde(default)]
     pub id: String,
@@ -49,7 +49,7 @@ pub struct Card {
     pub url: String,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct Board {
     #[serde(default)]
     pub cards: Vec<Card>,

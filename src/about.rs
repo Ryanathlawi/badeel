@@ -53,7 +53,7 @@ pub const PEOPLE: [Person; 2] = [
             "Founder · systems engineering and design",
         ),
         bio: (
-            "مؤسس بديل والمهندس الذي بناه سطرًا سطرًا، المحرّك الذرّي وطبقة التشفير ونظام الاسترجاع الذي لا يترك ملفًا في غير مكانه والواجهة بكل بكسل فيها، لا يشحن كودًا لا يفهمه ولا يستعير حلًّا لا يقدر أن يدافع عنه، سُرق حسابه مرّة فرفض أن يتكرّر ذلك لأحد غيره، وبنى مع مؤيد البرنامج الذي كان يتمنّى وجوده ذلك اليوم، وقاعدته الوحيدة أن ما لا تستطيع قراءته لا تستطيع ائتمانه.",
+            "مؤسس بديل والمهندس الذي بناه سطرًا سطرًا، المحرّك الذرّي وطبقة التشفير ونظام الاسترجاع الذي لا يترك ملفًا في غير مكانه والواجهة بكل بكسل فيها، لا يشحن كودًا لا يفهمه ولا يستعير حلًّا لا يقدر أن يدافع عنه، سُرق حسابه مرّة فرفض أن يتكرّر ذلك لأحد غيره، وبنى مع مؤيد البرنامج الذي كان يتمنّى وجوده ذلك اليوم، وقاعدته الوحيدة أن ما لا تستطيع قراءته لا تستطيع ائتمانه",
             "Founder of badeel and the engineer who built it line by line: the atomic engine, the encryption layer, the rollback system that never leaves a file out of place, and every pixel of the interface. He ships no code he does not understand and borrows no solution he cannot defend. His own account was stolen once; he refused to let that happen to anyone else, and built the program he wished had existed that day. His only rule: what you cannot read, you cannot trust.",
         ),
         tags: [
@@ -510,7 +510,7 @@ pub fn page(
                     foot.center(),
                     Align2::CENTER_CENTER,
                     lang.t(
-                        "شكرًا لكل من جرّب بديل وأرسل ملاحظة — أنتم جزء من هذه القائمة.",
+                        "شكرًا لكل من جرّب بديل وأرسل ملاحظة — أنتم جزء من هذه القائمة",
                         "Thank you to everyone who tried badeel and sent a note - you are part of this list too.",
                     ),
                     FontId::proportional(10.5),

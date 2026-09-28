@@ -2514,12 +2514,20 @@ fn promo_face(
         } else {
             pos2(x, y)
         };
-        let shown = galley.size().y.min(room);
-        p.with_clip_rect(Rect::from_min_size(
-            pos2(rect.left(), y),
-            vec2(rect.width(), shown),
-        ))
-        .galley(at, galley, pal.muted);
+        // يقف عند آخر سطر يتّسع كاملًا، فلا يظهر نصف سطر مشقوق
+        let shown = galley
+            .rows
+            .iter()
+            .map(|r| r.rect().max.y)
+            .filter(|&bottom| bottom <= room)
+            .fold(0.0, f32::max);
+        if shown > 0.0 {
+            p.with_clip_rect(Rect::from_min_size(
+                pos2(rect.left(), y),
+                vec2(rect.width(), shown),
+            ))
+            .galley(at, galley, pal.muted);
+        }
     }
 
     // الزرّ في مكانه نفسه على كل بطاقة، لا يتبع طول النصّ فيقفز بينها

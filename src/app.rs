@@ -372,7 +372,13 @@ impl App {
         let Some(rx) = &self.board_rx else { return };
         match rx.try_recv() {
             Ok(Ok(b)) => {
-                self.board = b;
+                // المحفوظ يظهر أوّلًا ثم يصل الجديد بعد لحظة، فإن اختلف دخل
+                // بحركة البطاقة نفسها بدل أن يقفز فوق القديم
+                if b != self.board {
+                    self.board = b;
+                    self.promo.t = 0.0;
+                    self.promo.prev = usize::MAX;
+                }
                 self.board_rx = None;
             }
             Ok(Err(e)) => {
@@ -3438,35 +3444,35 @@ impl App {
             (
                 lang.t("أهلًا بك في بديل", "Welcome to badeel"),
                 lang.t(
-                    "مبدّل حسابات لسبع منصّات، ستيم وباتل نت ورايوت وإيبك ويوبيسوفت وروكستار وجوج، بلا كلمات سر وبلا إعادة تسجيل دخول في كل مرة، من تأسيس ريان الأثلاوي ومؤيد المطيري.",
+                    "مبدّل حسابات لسبع منصّات، ستيم وباتل نت ورايوت وإيبك ويوبيسوفت وروكستار وجوج، بلا كلمات سر وبلا إعادة تسجيل دخول في كل مرة، من تأسيس ريان الأثلاوي ومؤيد المطيري",
                     "One switcher for Steam, Battle.net, Riot, Epic, Ubisoft, Rockstar and GOG. No passwords, no signing in again. Founded by Ryan Athlawi and Moayad Almutairi.",
                 ),
             ),
             (
                 lang.t("اختر منصّتك", "Pick your platform"),
                 lang.t(
-                    "الشاشة الأولى تعرض منصّاتك المثبّتة وعدد الحسابات المحفوظة في كل واحدة، واضغط الرقم للاختيار السريع.",
+                    "الشاشة الأولى تعرض منصّاتك المثبّتة وعدد الحسابات المحفوظة في كل واحدة، واضغط الرقم للاختيار السريع",
                     "The first screen shows your installed platforms and how many accounts you saved in each. Press its number to jump.",
                 ),
             ),
             (
                 lang.t("احفظ حسابك الحالي", "Save the account you are on"),
                 lang.t(
-                    "سجّل دخولك في المنصّة كالمعتاد مرة واحدة، ثم اضغط «أضف الحساب الحالي» وسمِّه، وكرّر ذلك لكل حساب.",
+                    "سجّل دخولك في المنصّة كالمعتاد مرة واحدة، ثم اضغط «أضف الحساب الحالي» وسمِّه، وكرّر ذلك لكل حساب",
                     "Sign in on the platform once as usual, then press Add current account and name it. Repeat per account.",
                 ),
             ),
             (
                 lang.t("بدّل بضغطة", "Switch in one click"),
                 lang.t(
-                    "بديل يغلق المنصّة، يحفظ جلستك الحالية، يركّب الحساب المطلوب، ثم يشغّلها من جديد، وإن تعثّر شيء رجع كل شيء كما كان.",
+                    "بديل يغلق المنصّة، يحفظ جلستك الحالية، يركّب الحساب المطلوب، ثم يشغّلها من جديد، وإن تعثّر شيء رجع كل شيء كما كان",
                     "badeel closes the platform, saves your current session, restores the one you picked and starts it again. If anything fails, everything goes back as it was.",
                 ),
             ),
             (
                 lang.t("كل شي مشفّر", "Everything is encrypted"),
                 lang.t(
-                    "جلساتك تُحفظ مشفّرة ومربوطة بحساب ويندوز وبجهازك، ونسخها إلى جهاز آخر لا تفتح، وتقدر تضيف كلمة سر فوقها من الإعدادات.",
+                    "جلساتك تُحفظ مشفّرة ومربوطة بحساب ويندوز وبجهازك، ونسخها إلى جهاز آخر لا تفتح، وتقدر تضيف كلمة سر فوقها من الإعدادات",
                     "Your sessions are stored encrypted and bound to this Windows account and PC — a copy on another machine will not open. Add a password on top from Settings.",
                 ),
             ),
@@ -3642,7 +3648,7 @@ impl App {
                     );
                     ui.label(
                         RichText::new(lang.t(
-                            "يُحفظ الحساب المسجَّل دخوله الآن، مشفّرًا على جهازك.",
+                            "يُحفظ الحساب المسجَّل دخوله الآن، مشفّرًا على جهازك",
                             "Saves the account signed in right now, encrypted on your PC.",
                         ))
                         .size(11.5)
@@ -3738,7 +3744,7 @@ impl App {
                             "{} «{name}». {}",
                             lang.t("سيُحذف من بديل", "Removes it from badeel"),
                             lang.t(
-                                "الحساب نفسه لا يُمسّ — تُحذف نسخته المحفوظة هنا فقط.",
+                                "الحساب نفسه لا يُمسّ — تُحذف نسخته المحفوظة هنا فقط",
                                 "The account itself is untouched — only the copy saved here."
                             )
                         ))
@@ -3779,7 +3785,7 @@ impl App {
                     ui::dialog_title(ui, &pal, rtl, lang.t("الخزنة مقفلة", "Vault locked"));
                     ui.label(
                         RichText::new(lang.t(
-                            "حساباتك مشفّرة، أدخل كلمة السر لفتحها.",
+                            "حساباتك مشفّرة، أدخل كلمة السر لفتحها",
                             "Your accounts are encrypted. Enter the password.",
                         ))
                         .size(11.5)
@@ -3819,7 +3825,7 @@ impl App {
                     ui::dialog_title(ui, &pal, rtl, lang.t("كلمة سر الخزنة", "Vault password"));
                     ui.label(
                         RichText::new(lang.t(
-                            "لا يمكن استرجاعها — احفظها في مكان آمن.",
+                            "لا يمكن استرجاعها — احفظها في مكان آمن",
                             "It cannot be recovered — keep it somewhere safe.",
                         ))
                         .size(11.5)
@@ -3895,7 +3901,7 @@ impl App {
                             "{} «{name}». {} {plat} {}",
                             lang.t("سيُبدّل إلى", "Switching to"),
                             lang.t("سيُغلق", "This closes"),
-                            lang.t("ويُعاد تشغيله.", "and starts it again."),
+                            lang.t("ويُعاد تشغيله", "and starts it again."),
                         ))
                         .size(12.0)
                         .color(pal.muted),
@@ -3903,7 +3909,7 @@ impl App {
                     ui.add_space(6.0);
                     ui.label(
                         RichText::new(lang.t(
-                            "لو عندك لعبة شغّالة أغلقها أولًا.",
+                            "لو عندك لعبة شغّالة أغلقها أولًا",
                             "If a game is running, close it first.",
                         ))
                         .size(11.0)
@@ -3942,7 +3948,7 @@ impl App {
                     ui::dialog_title(ui, &pal, rtl, lang.t("ملف شخصي جديد", "New profile"));
                     ui.label(
                         RichText::new(lang.t(
-                            "ملف مستقل بحساباته ولونه وإعدادات مظهره — مناسب لو أكثر من شخص يستخدم الجهاز.",
+                            "ملف مستقل بحساباته ولونه وإعدادات مظهره — مناسب لو أكثر من شخص يستخدم الجهاز",
                             "A separate space with its own accounts, colour and look — for when more than one person uses this PC.",
                         ))
                         .size(11.5)
@@ -4051,7 +4057,7 @@ impl App {
                         RichText::new(format!(
                             "«{name}» — {}",
                             lang.t(
-                                "تُمسح الحسابات المحفوظة فيه نهائيًا، وحساباتك في المنصّات لا تُمسّ.",
+                                "تُمسح الحسابات المحفوظة فيه نهائيًا، وحساباتك في المنصّات لا تُمسّ",
                                 "Its saved accounts are erased for good. Your accounts on the platforms are untouched."
                             )
                         ))

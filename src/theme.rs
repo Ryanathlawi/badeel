@@ -146,6 +146,22 @@ pub fn fonts() -> FontDefinitions {
         list.insert(0, "latin".to_owned());
         list.insert(0, "arabic".to_owned());
     }
+
+    // أسماء اللاعبين تأتي بحروف مزخرفة مثل ǺŦĤĿǺŴȈ ورموز مثل ♛ لا يحملها خطّا
+    // البرنامج فتظهر علامات استفهام، فيُستعان بخطّي ويندوز في آخر القائمة لما
+    // لا يجده غيرهما، ولا يُحمَّل شيء منهما إن لم يوجدا
+    let system = std::env::var_os("WINDIR").map(|w| std::path::PathBuf::from(w).join("Fonts"));
+    for (name, file) in [("segoe", "segoeui.ttf"), ("symbols", "seguisym.ttf")] {
+        let Some(bytes) = system.as_ref().and_then(|d| std::fs::read(d.join(file)).ok()) else {
+            continue;
+        };
+        fonts
+            .font_data
+            .insert(name.to_owned(), std::sync::Arc::new(FontData::from_owned(bytes)));
+        for family in [FontFamily::Proportional, FontFamily::Monospace] {
+            fonts.families.entry(family).or_default().push(name.to_owned());
+        }
+    }
     fonts
 }
 

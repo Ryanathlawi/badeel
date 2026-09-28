@@ -18,7 +18,7 @@ pub const CARDS: [Card; 7] = [
         tag: ("المحرّك", "ENGINE"),
         title: ("تبديل ذرّي لا يترك أثرًا", "An atomic switch"),
         body: (
-            "يغلق المنصّة، يحفظ جلستك الحالية، يركّب الحساب الجديد، ثم يشغّلها، وإن تعثّرت أي خطوة رجع كل ملف إلى مكانه بالضبط.",
+            "يغلق المنصّة، يحفظ جلستك الحالية، يركّب الحساب الجديد، ثم يشغّلها، وإن تعثّرت أي خطوة رجع كل ملف إلى مكانه بالضبط",
             "It closes the platform, saves your current session, restores the account you picked, then starts it again. If any step fails, every file goes back exactly where it was.",
         ),
         glyph: 0,
@@ -28,7 +28,7 @@ pub const CARDS: [Card; 7] = [
         tag: ("الأمان", "SECURITY"),
         title: ("AES-256 مربوط بجهازك", "AES-256, bound to your PC"),
         body: (
-            "كل جلسة تُحفظ مشفّرة بمفتاح مشتقّ من حماية ويندوز لحسابك، ونسخة مسروقة إلى جهاز آخر لا تُفتح أصلًا.",
+            "كل جلسة تُحفظ مشفّرة بمفتاح مشتقّ من حماية ويندوز لحسابك، ونسخة مسروقة إلى جهاز آخر لا تُفتح أصلًا",
             "Every session is stored encrypted under a key derived from your Windows account protection. A copy stolen to another machine simply will not open.",
         ),
         glyph: 1,
@@ -38,7 +38,7 @@ pub const CARDS: [Card; 7] = [
         tag: ("الخصوصية", "PRIVACY"),
         title: ("ما نشوف كلمة سرّك", "We never see your password"),
         body: (
-            "بديل لا يطلب كلمة سر المنصّة ولا يقرأها ولا يخزّنها، وإنما يتعامل مع ملفات الجلسة نفسها التي أنشأتها المنصّة.",
+            "بديل لا يطلب كلمة سر المنصّة ولا يقرأها ولا يخزّنها، وإنما يتعامل مع ملفات الجلسة نفسها التي أنشأتها المنصّة",
             "badeel never asks for, reads or stores a platform password. It moves the very session files the platform itself created.",
         ),
         glyph: 2,
@@ -48,7 +48,7 @@ pub const CARDS: [Card; 7] = [
         tag: ("المنصّات", "PLATFORMS"),
         title: ("كل منصّاتك بنافذة واحدة", "Every launcher, one window"),
         body: (
-            "ستيم، باتل نت، رايوت، إيبك، يوبيسوفت، روكستار، وجوج — كل واحدة بحساباتها وصورها وذاكرة استخدامها.",
+            "ستيم، باتل نت، رايوت، إيبك، يوبيسوفت، روكستار، وجوج — كل واحدة بحساباتها وصورها وذاكرة استخدامها",
             "Steam, Battle.net, Riot, Epic, Ubisoft, Rockstar and GOG — each with its own accounts, pictures and usage memory.",
         ),
         glyph: 3,
@@ -58,7 +58,7 @@ pub const CARDS: [Card; 7] = [
         tag: ("الاكتشاف", "DISCOVERY"),
         title: ("يلقى تثبيتك مهما كان مكانه", "Finds your install anywhere"),
         body: (
-            "لا مسارات مكتوبة مسبقًا، يقرأ سجل ويندوز وملفات المنصّات ليعرف أين ثُبّتت، ولو كانت على قرص آخر.",
+            "لا مسارات مكتوبة مسبقًا، يقرأ سجل ويندوز وملفات المنصّات ليعرف أين ثُبّتت، ولو كانت على قرص آخر",
             "No hardcoded paths. It reads the Windows registry and the platforms' own files to locate them, even on another drive.",
         ),
         glyph: 4,
@@ -68,7 +68,7 @@ pub const CARDS: [Card; 7] = [
         tag: ("التحديثات", "UPDATES"),
         title: ("يحدّث نفسه بنفسه", "It updates itself"),
         body: (
-            "أي إصدار جديد يصلك كتنبيه داخل التطبيق، وينزّل ويثبّت بضغطة واحدة، مع الاحتفاظ بالنسخة السابقة.",
+            "أي إصدار جديد يصلك كتنبيه داخل التطبيق، وينزّل ويثبّت بضغطة واحدة، مع الاحتفاظ بالنسخة السابقة",
             "A new release reaches you as a notice inside the app, downloads and installs in one click, and keeps the previous build.",
         ),
         glyph: 5,
