@@ -74,7 +74,7 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://github.com/Ryanathlawi/badeel/raw/main/.assets/features-dark.png" />
   <source media="(prefers-color-scheme: light)" srcset="https://github.com/Ryanathlawi/badeel/raw/main/.assets/features-light.png" />
-  <img src="https://github.com/Ryanathlawi/badeel/raw/main/.assets/features-dark.png" width="100%" alt="تبديل ذرّي، مربوط بجهازك، بلا كلمة سر، ملف لكل شخص، يجد تثبيتك، بلا خوادم" />
+  <img src="https://github.com/Ryanathlawi/badeel/raw/main/.assets/features-dark.png" width="100%" alt="تبديل ذرّي، مربوط بجهازك، بلا كلمة سر، ملف لكل شخص، يجد تثبيتك، بلا خوادم، بحث شامل، ينتقل معك، يحمي مباراتك" />
 </picture>
 
 <picture>
