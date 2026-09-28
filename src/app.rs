@@ -93,6 +93,7 @@ pub enum ToastKind {
 
 pub enum Dialog {
     None,
+    Find { query: String, pick: usize },
     AddAccount { name: String, error: String },
     Rename { id: String, name: String },
     Confirm { id: String, name: String },
@@ -178,6 +179,7 @@ pub struct App {
     board_rx: Option<Receiver<anyhow::Result<board::Board>>>,
     promo: Showcase,
     promo_hot: bool,
+    find: Vec<Hit>,
 }
 
 impl App {
@@ -263,6 +265,7 @@ impl App {
             board_rx: None,
             promo: Showcase::default(),
             promo_hot: false,
+            find: Vec::new(),
         };
         app.picking = app.book.profiles.len() > 1;
         app.presence.set_enabled(app.settings.discord);
@@ -391,58 +394,8 @@ impl App {
     }
 
     fn reload(&mut self) {
-        self.accounts = store::load(self.platform.id);
+        self.accounts = accounts_of(self.platform);
         self.current_id = switch::current_id(self.platform);
-        if matches!(self.platform.identity, catalog::Identity::Steam) {
-            if let Ok(list) = steam::accounts() {
-                for a in list {
-                    if self.accounts.get(&a.id64).is_none() {
-                        let name = if a.persona.is_empty() {
-                            a.login.clone()
-                        } else {
-                            a.persona.clone()
-                        };
-                        self.accounts.upsert(store::Account {
-                            id: a.id64.clone(),
-                            name,
-                            note: a.login,
-                            avatar: steam::avatar_path(&a.id64)
-                                .map(|p| p.to_string_lossy().to_string()),
-                            last_used: 0,
-                            uses: 0,
-                        });
-                    }
-                }
-                for acc in self.accounts.accounts.iter_mut() {
-                    if acc.avatar.is_none() {
-                        acc.avatar =
-                            steam::avatar_path(&acc.id).map(|p| p.to_string_lossy().to_string());
-                    }
-                }
-                let _ = store::save(self.platform.id, &self.accounts);
-            }
-        }
-        if matches!(self.platform.identity, catalog::Identity::Bnet) {
-            let mut fresh = false;
-            for email in bnet::accounts() {
-                if self.accounts.get(&email).is_some() {
-                    continue;
-                }
-                let name = email.split('@').next().unwrap_or(&email).to_string();
-                self.accounts.upsert(store::Account {
-                    id: email.clone(),
-                    name,
-                    note: email,
-                    avatar: None,
-                    last_used: 0,
-                    uses: 0,
-                });
-                fresh = true;
-            }
-            if fresh {
-                let _ = store::save(self.platform.id, &self.accounts);
-            }
-        }
         let i = catalog::index_of(self.platform.id);
         if let Some(c) = self.counts.get_mut(i) {
             *c = self.accounts.accounts.len();
@@ -473,6 +426,40 @@ impl App {
         self.promo = Showcase::default();
         self.reload();
         self.offer_current();
+    }
+
+    /// يجمع حسابات كل المنصّات المثبّتة مرّة عند الفتح، لا في كل إطار
+    fn open_find(&mut self) {
+        let installed = self.installed.clone();
+        self.find = catalog::PLATFORMS
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| installed.get(*i).copied().unwrap_or(false))
+            .flat_map(|(_, p)| {
+                let live = switch::current_id(p);
+                accounts_of(p).accounts.into_iter().map(move |acc| Hit {
+                    live: live.as_deref() == Some(acc.id.as_str()),
+                    plat: p,
+                    acc,
+                })
+            })
+            .collect();
+        self.dialog = Dialog::Find {
+            query: String::new(),
+            pick: 0,
+        };
+    }
+
+    /// يفتح منصّة الحساب ويحدّده، ويبدّل له إن لم يكن هو المسجَّل دخوله
+    fn go_to_hit(&mut self, plat: &'static Platform, id: String, live: bool) {
+        self.go(Route::Accounts);
+        if plat.id != self.platform.id {
+            self.open_platform(plat);
+        }
+        self.selected = Some(id.clone());
+        if !live {
+            self.ask_switch(id);
+        }
     }
 
     /// ستيم وباتل نت يحفظان قائمة حساباتهما فيقرأها بديل وحده، وبقية المنصّات
@@ -671,6 +658,15 @@ impl App {
 
     fn hotkeys(&mut self, ui: &egui::Ui) {
         if !matches!(self.dialog, Dialog::None) || self.tour.is_some() || self.picking {
+            return;
+        }
+        if ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::K)) {
+            self.open_find();
+            return;
+        }
+        // من يكتب في خانة لا يقصد اختصارًا، وكان حرف l في بحث الحسابات يقفل
+        // الخزنة وحرف s يفتح الإعدادات ورقم ينقل المنصّة
+        if ui.ctx().text_edit_focused() {
             return;
         }
         let (esc, digit, gear, lock) = ui.input(|i| {
@@ -1154,6 +1150,7 @@ impl App {
                     ui.with_layout(l, |ui| {
                         ui.spacing_mut().item_spacing.x = 12.0;
                         ui::key_chip(ui, &pal, "esc", lang.t("إغلاق", "close"));
+                        ui::key_chip(ui, &pal, "Ctrl K", lang.t("بحث", "find"));
                         ui::key_chip(ui, &pal, "1-7", lang.t("المنصّة", "platform"));
                         ui::key_chip(ui, &pal, "S", lang.t("الإعدادات", "settings"));
                         ui::key_chip(ui, &pal, "L", lang.t("قفل الخزنة", "lock"));
@@ -3634,8 +3631,79 @@ impl App {
         let lang = self.settings.lang;
         let mut close = false;
 
+        let mut found: Option<(&'static Platform, String, bool)> = None;
         match &mut self.dialog {
             Dialog::None => {}
+            Dialog::Find { query, pick } => {
+                let t = self.t0.elapsed().as_secs_f32();
+                let hits = rank(&self.find, query);
+                let n = hits.len();
+                let (up, down, enter) = ctx.input(|i| {
+                    (
+                        i.key_pressed(egui::Key::ArrowUp),
+                        i.key_pressed(egui::Key::ArrowDown),
+                        i.key_pressed(egui::Key::Enter),
+                    )
+                });
+                if n > 0 {
+                    if down {
+                        *pick = (*pick + 1) % n;
+                    }
+                    if up {
+                        *pick = (*pick + n - 1) % n;
+                    }
+                    *pick = (*pick).min(n - 1);
+                }
+                let mut chosen = (enter && n > 0).then_some(*pick);
+                let before = query.clone();
+                let modal = egui::Modal::new(egui::Id::new("find")).show(ctx, |ui| {
+                    ui.set_width(460.0);
+                    ui::dialog_title(
+                        ui,
+                        &pal,
+                        rtl,
+                        lang.t("ابحث في كل حساباتك", "Find any account"),
+                    );
+                    ui.add(
+                        egui::TextEdit::singleline(query)
+                            .hint_text(lang.t(
+                                "اسم الحساب أو المنصّة",
+                                "An account or platform name",
+                            ))
+                            .desired_width(f32::INFINITY),
+                    )
+                    .request_focus();
+                    ui.add_space(10.0);
+                    if hits.is_empty() {
+                        ui.label(
+                            RichText::new(lang.t(
+                                "ما لقيت حساب بهذا الاسم",
+                                "No account matches that",
+                            ))
+                            .color(pal.muted),
+                        );
+                    }
+                    ui.spacing_mut().item_spacing.y = 6.0;
+                    for (i, h) in hits.iter().enumerate() {
+                        let act = ui::account_row(
+                            ui, &pal, rtl, &h.acc, h.plat.id, h.live, i == *pick, 1.0, t, lang,
+                        );
+                        if act.is_some_and(|a| a != 2) {
+                            chosen = Some(i);
+                        }
+                    }
+                });
+                if *query != before {
+                    *pick = 0;
+                }
+                if let Some(h) = chosen.and_then(|i| hits.get(i)) {
+                    found = Some((h.plat, h.acc.id.clone(), h.live));
+                    close = true;
+                }
+                if modal.should_close() {
+                    close = true;
+                }
+            }
             Dialog::AddAccount { name, error } => {
                 let mut confirm = false;
                 let modal = egui::Modal::new(egui::Id::new("add")).show(ctx, |ui| {
@@ -4165,8 +4233,113 @@ impl App {
 
         if close {
             self.dialog = Dialog::None;
+            self.find.clear();
+        }
+        if let Some((plat, id, live)) = found {
+            self.go_to_hit(plat, id, live);
         }
     }
+}
+
+/// سجلّ حسابات منصّة كما يجب أن يظهر: المحفوظ، ومعه ما تحفظه المنصّة نفسها
+/// في قائمتها ولم يدخل السجلّ بعد، ويُكتب السجلّ إن زاد فيه شيء
+///
+/// تستعمله صفحة المنصّة والبحث الشامل معًا، فلا يرى أحدهما غير ما يراه الآخر
+fn accounts_of(p: &'static Platform) -> store::Index {
+    let mut index = store::load(p.id);
+    let mut fresh = false;
+    match p.identity {
+        catalog::Identity::Steam => {
+            for a in steam::accounts().unwrap_or_default() {
+                if index.get(&a.id64).is_some() {
+                    continue;
+                }
+                let name = if a.persona.is_empty() {
+                    a.login.clone()
+                } else {
+                    a.persona.clone()
+                };
+                index.upsert(store::Account {
+                    id: a.id64,
+                    name,
+                    note: a.login,
+                    avatar: None,
+                    last_used: 0,
+                    uses: 0,
+                });
+                fresh = true;
+            }
+            for acc in index.accounts.iter_mut() {
+                if acc.avatar.is_none() {
+                    acc.avatar =
+                        steam::avatar_path(&acc.id).map(|p| p.to_string_lossy().to_string());
+                    fresh |= acc.avatar.is_some();
+                }
+            }
+        }
+        catalog::Identity::Bnet => {
+            for email in bnet::accounts() {
+                if index.get(&email).is_some() {
+                    continue;
+                }
+                let name = email.split('@').next().unwrap_or(&email).to_string();
+                index.upsert(store::Account {
+                    id: email.clone(),
+                    name,
+                    note: email,
+                    avatar: None,
+                    last_used: 0,
+                    uses: 0,
+                });
+                fresh = true;
+            }
+        }
+        _ => {}
+    }
+    if fresh {
+        let _ = store::save(p.id, &index);
+    }
+    index
+}
+
+/// سطر في البحث الشامل: حساب ومنصّته، وهل هو المسجَّل دخوله الآن فيها
+struct Hit {
+    plat: &'static Platform,
+    acc: store::Account,
+    live: bool,
+}
+
+/// كم سطرًا يعرض البحث، فلا تطول النافذة على الشاشات القصيرة
+const FIND_ROWS: usize = 6;
+
+/// ما يطابق البحث مرتّبًا: من يبدأ اسمه بما كُتب أوّلًا ثم من يحتويه في اسمه
+/// أو ملاحظته أو اسم منصّته بأيّ اللغتين، وبين المتساويين الأحدث استخدامًا،
+/// والبحث الفارغ يعرض أحدث الحسابات استخدامًا في كل المنصّات
+fn rank<'a>(hits: &'a [Hit], query: &str) -> Vec<&'a Hit> {
+    let q = query.trim().to_lowercase();
+    let mut out: Vec<(u8, &Hit)> = hits
+        .iter()
+        .filter_map(|h| {
+            if q.is_empty() {
+                return Some((1, h));
+            }
+            let name = h.acc.name.to_lowercase();
+            if name.starts_with(&q) {
+                return Some((0, h));
+            }
+            let hay = [
+                name.as_str(),
+                &h.acc.note.to_lowercase(),
+                h.plat.name_ar,
+                &h.plat.name_en.to_lowercase(),
+                h.plat.id,
+            ]
+            .join(" ");
+            hay.contains(&q).then_some((1, h))
+        })
+        .collect();
+    out.sort_by_key(|(tier, h)| (*tier, std::cmp::Reverse(h.acc.last_used)));
+    out.into_iter().map(|(_, h)| h).take(FIND_ROWS).collect()
 }
 
 fn mask(text: &str, on: bool) -> String {
@@ -4220,5 +4393,50 @@ pub fn platform_color(id: &str) -> Color32 {
         "rockstar" => rgb(249, 175, 30),
         "gog" => rgb(180, 120, 245),
         _ => rgb(150, 130, 255),
+    }
+}
+
+#[cfg(test)]
+mod find_tests {
+    use super::*;
+
+    fn hit(pid: &str, name: &str, last: u64) -> Hit {
+        Hit {
+            plat: &catalog::PLATFORMS[catalog::index_of(pid)],
+            acc: store::Account {
+                id: format!("{pid}:{name}"),
+                name: name.into(),
+                note: String::new(),
+                avatar: None,
+                last_used: last,
+                uses: 0,
+            },
+            live: false,
+        }
+    }
+
+    fn names(v: Vec<&Hit>) -> Vec<String> {
+        v.iter().map(|h| h.acc.name.clone()).collect()
+    }
+
+    #[test]
+    fn a_name_that_starts_with_the_query_comes_before_one_that_only_contains_it() {
+        let hits = vec![hit("steam", "xryan", 50), hit("riot", "ryan", 10), hit("epic", "other", 99)];
+        assert_eq!(names(rank(&hits, "RY")), vec!["ryan", "xryan"]);
+    }
+
+    #[test]
+    fn a_platform_name_in_either_language_finds_its_accounts() {
+        let hits = vec![hit("battlenet", "a", 1), hit("steam", "b", 2)];
+        assert_eq!(names(rank(&hits, "باتل")), vec!["a"]);
+        assert_eq!(names(rank(&hits, "battle")), vec!["a"]);
+    }
+
+    #[test]
+    fn an_empty_query_lists_the_most_recently_used_first_and_stays_short() {
+        let hits: Vec<Hit> = (0..10).map(|i| hit("steam", &format!("n{i}"), i)).collect();
+        let r = rank(&hits, "  ");
+        assert_eq!(r.len(), FIND_ROWS);
+        assert_eq!(r[0].acc.name, "n9");
     }
 }
