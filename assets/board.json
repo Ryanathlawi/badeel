@@ -4,10 +4,10 @@
       "id": "dropship",
       "platforms": ["battlenet"],
       "badge": { "ar": "من أثلاوي", "en": "Also from Athlawi" },
-      "title": { "ar": "دروبشيب", "en": "dropship" },
+      "title": { "ar": "دروب شيب", "en": "dropship" },
       "body": {
-        "ar": "يحجب مجموعة سيرفرات بضغطة واحدة فتلعب على السيرفر الذي تريده، بخريطة عالم حيّة وبينق يتجدّد كل ثوانٍ، وعربي كامل من اليمين إلى اليسار.",
-        "en": "Blocks a whole set of servers in one press so you play on the region you want, with a live world map and ping refreshing every few seconds."
+        "ar": "تبي تلعب على سيرفر معيّن؟ دروب شيب يبلّك لك الباقي بضغطة وحدة ويوريك البينق أول بأول",
+        "en": "Want a specific server? dropship blocks the rest in one press and shows your ping live"
       },
       "cta": { "ar": "شوفه", "en": "Take a look" },
       "url": "https://ryanathlawi.github.io/dropship-site/"
@@ -16,10 +16,10 @@
       "id": "why",
       "platforms": [],
       "badge": { "ar": "", "en": "" },
-      "title": { "ar": "بدّل وارجع للّعب", "en": "Switch and get back to the game" },
+      "title": { "ar": "بدّل وكمّل قيمك", "en": "Switch and keep playing" },
       "body": {
-        "ar": "كل ثانية تقضيها في تسجيل الدخول ثانية لم تلعبها، وهذا وحده سبب وجود بديل.",
-        "en": "Every second spent signing in is a second not spent playing, and that alone is why badeel exists."
+        "ar": "كل دقيقة تروح في تسجيل الدخول دقيقة ما لعبتها وعشان كذا سوّينا بديل",
+        "en": "Every minute spent signing in is a minute you didn't play, that's why we made badeel"
       },
       "cta": { "ar": "", "en": "" },
       "url": ""
@@ -30,8 +30,8 @@
       "badge": { "ar": "", "en": "" },
       "title": { "ar": "عجبك بديل؟", "en": "Liking badeel?" },
       "body": {
-        "ar": "أرسل الرابط لمن تعرفه يلعب بحسابين، فهذا كل ما نطلبه مقابله.",
-        "en": "Send the link to someone you know who plays on two accounts, that is all we ask for it."
+        "ar": "عندك خويّ يلعب بأكثر من حساب؟ ارسل له الرابط وهذا كل الي نبيه منك",
+        "en": "Know someone who plays on more than one account? Send them the link, that's all we ask"
       },
       "cta": { "ar": "افتح الموقع", "en": "Open the site" },
       "url": "https://ryanathlawi.github.io/badeel-site/"

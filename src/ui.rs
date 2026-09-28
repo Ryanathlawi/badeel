@@ -2379,9 +2379,13 @@ pub fn panel_card(painter: &egui::Painter, rect: Rect, pal: &Palette) {
     );
 }
 
-/// بطاقة اللوحة: شارة صغيرة وعنوان ونصّ، ويُرجع صحيحًا إن نُقرت ولها رابط
+/// وجه بطاقة اللوحة: شارة، عنوان، نصّ، زرّ، رابط
+pub type Face = [String; 5];
+
+/// بطاقة اللوحة، وتتحرّك كما تتحرّك بطاقة الشاشة الأولى: تنسحب القديمة
+/// إلى جهة وتدخل الجديدة من الأخرى، ويهدأ التأشير عليها بلا قفزة
 ///
-/// تُرسم بلغة البطاقات نفسها في البرنامج، فلا تبدو لافتة دخيلة عليه
+/// ترجع أنها نُقرت وأن المؤشّر فوقها، والثاني يوقف الدوران ما دام يقرؤها
 #[allow(clippy::too_many_arguments)]
 pub fn promo_card(
     ui: &mut egui::Ui,
@@ -2389,54 +2393,92 @@ pub fn promo_card(
     pal: &Palette,
     rtl: bool,
     tint: Color32,
-    badge: &str,
-    title: &str,
-    body: &str,
-    cta: &str,
+    cur: &Face,
+    prev: Option<&Face>,
+    phase: f32,
     alpha: f32,
-) -> bool {
+) -> (bool, bool) {
     if alpha <= 0.004 || rect.height() < 34.0 {
-        return false;
+        return (false, false);
     }
-    let clickable = !cta.trim().is_empty();
-    let id = egui::Id::new("promo").with(title);
+    let clickable = !cur[3].trim().is_empty() && !cur[4].trim().is_empty();
     let res = ui.interact(
         rect,
-        id,
+        egui::Id::new("promo"),
         if clickable {
             Sense::click()
         } else {
             Sense::hover()
         },
     );
-    let lift = if clickable && res.hovered() { 1.0 } else { 0.0 };
+    let hot = ui
+        .ctx()
+        .animate_bool_with_time(res.id, clickable && res.hovered(), crate::motion::hover_time());
     if clickable && res.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
 
-    let p = ui.painter();
-    p.rect_filled(rect, 16.0, pal.panel_hi.gamma_multiply((0.5 + lift * 0.3) * alpha));
-    p.rect_stroke(
-        rect,
-        16.0,
-        egui::Stroke::new(
-            1.0,
-            tint.gamma_multiply((0.26 + lift * 0.3) * alpha),
-        ),
-        StrokeKind::Inside,
-    );
-    // شريط رقيق على حافة البداية يربطها بلون المنصّة
-    let edge = if rtl {
-        Rect::from_min_max(rect.right_top() - vec2(3.0, 0.0), rect.right_bottom())
-    } else {
-        Rect::from_min_max(rect.left_top(), rect.left_bottom() + vec2(3.0, 0.0))
-    };
-    p.rect_filled(edge.shrink2(vec2(0.0, 12.0)), 2.0, tint.gamma_multiply(0.85 * alpha));
+    {
+        let p = ui.painter();
+        p.rect_filled(
+            rect,
+            16.0,
+            pal.panel_hi.gamma_multiply((0.55 + 0.25 * hot) * alpha),
+        );
+        p.rect_stroke(
+            rect,
+            16.0,
+            egui::Stroke::new(
+                1.0,
+                lerp_color(pal.line, tint.gamma_multiply(0.55), hot).gamma_multiply(alpha),
+            ),
+            StrokeKind::Inside,
+        );
+    }
 
-    let pad = 12.0;
-    let x = if rtl { rect.right() - pad } else { rect.left() + pad };
+    // الحساب نفسه الذي تنزلق به بطاقة الشاشة الأولى
+    let dir = if rtl { -1.0 } else { 1.0 };
+    let leaving = 1.0 - (phase / 0.45).clamp(0.0, 1.0);
+    let arriving = ((phase - 0.35) / 0.65).clamp(0.0, 1.0);
+    let p = ui.painter().with_clip_rect(rect);
+    if let Some(old) = prev.filter(|_| leaving > 0.001) {
+        promo_face(&p, rect, pal, rtl, tint, old, leaving * alpha, -dir * 18.0 * (1.0 - leaving), 0.0);
+    }
+    promo_face(
+        &p,
+        rect,
+        pal,
+        rtl,
+        tint,
+        cur,
+        arriving * alpha,
+        dir * 18.0 * (1.0 - ease_out(arriving)),
+        hot,
+    );
+
+    (clickable && res.clicked(), res.hovered())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn promo_face(
+    p: &egui::Painter,
+    rect: Rect,
+    pal: &Palette,
+    rtl: bool,
+    tint: Color32,
+    face: &Face,
+    alpha: f32,
+    dx: f32,
+    hot: f32,
+) {
+    if alpha <= 0.004 {
+        return;
+    }
+    let [badge, title, body, cta, _] = face;
+    let pad = 14.0;
+    let x = if rtl { rect.right() - pad } else { rect.left() + pad } + dx;
     let anchor = if rtl { Align2::RIGHT_TOP } else { Align2::LEFT_TOP };
-    let mut y = rect.top() + 9.0;
+    let mut y = rect.top() + 11.0;
 
     if !badge.trim().is_empty() {
         p.text(
@@ -2446,62 +2488,57 @@ pub fn promo_card(
             FontId::proportional(9.5),
             tint.gamma_multiply(0.95 * alpha),
         );
-        y += 13.0;
+        y += 14.0;
     }
     p.text(
         pos2(x, y),
         anchor,
         title,
-        FontId::proportional(13.0),
+        FontId::proportional(13.5),
         pal.text.gamma_multiply(alpha),
     );
-    y += 18.0;
+    y += 20.0;
 
-    let wrap = rect.width() - pad * 2.0;
-    let room = rect.bottom() - y - if clickable { 26.0 } else { 8.0 };
+    let has_cta = !cta.trim().is_empty();
+    // نصّ اللوحة يُكتب من بعيد وقد يطول، فيُقصّ على ما يتّسع بدل أن يسقط
+    let room = rect.bottom() - y - if has_cta { 40.0 } else { 10.0 };
     if !body.trim().is_empty() && room > 10.0 {
         let galley = p.layout(
-            body.to_string(),
+            body.clone(),
             FontId::proportional(10.5),
             pal.muted.gamma_multiply(0.95 * alpha),
-            wrap,
+            rect.width() - pad * 2.0,
         );
         let at = if rtl {
             pos2(x - galley.size().x, y)
         } else {
             pos2(x, y)
         };
-        // نصّ اللوحة يُكتب من بعيد، فقد يطول أكثر من البطاقة، فيُقصّ
-        // على ما يتّسع بدل أن يسقط كلّه ويبقى العنوان وحده
         let shown = galley.size().y.min(room);
         p.with_clip_rect(Rect::from_min_size(
             pos2(rect.left(), y),
             vec2(rect.width(), shown),
         ))
         .galley(at, galley, pal.muted);
-        y += shown + 6.0;
     }
 
-    if clickable && y + 16.0 <= rect.bottom() {
+    // الزرّ في مكانه نفسه على كل بطاقة، لا يتبع طول النصّ فيقفز بينها
+    if has_cta {
         let g = p.layout_no_wrap(
-            cta.to_string(),
+            cta.clone(),
             FontId::proportional(10.5),
             tint.gamma_multiply(alpha),
         );
-        let w = g.size().x + 20.0;
+        let w = g.size().x + 22.0;
         let r = Rect::from_min_size(
-            pos2(if rtl { x - w } else { x }, y),
-            vec2(w, 20.0),
+            pos2(if rtl { x - w } else { x }, rect.bottom() - 12.0 - 22.0),
+            vec2(w, 22.0),
         );
-        p.rect_filled(r, 999.0, tint.gamma_multiply((0.16 + lift * 0.14) * alpha));
-        p.text(
-            r.center(),
-            Align2::CENTER_CENTER,
-            cta,
-            FontId::proportional(10.5),
-            tint.gamma_multiply(alpha),
+        p.rect_filled(
+            r,
+            999.0,
+            tint.gamma_multiply((0.14 + 0.12 * hot) * alpha),
         );
+        p.galley(r.center() - g.size() * 0.5, g, tint);
     }
-
-    clickable && res.clicked()
 }

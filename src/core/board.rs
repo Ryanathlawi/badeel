@@ -16,9 +16,6 @@ use super::paths;
 const URL: &str = "https://ryanathlawi.github.io/badeel-site/board.json";
 const BUNDLED: &str = include_str!("../../assets/board.json");
 
-/// تتغيّر البطاقة المعروضة كل هذه المدّة، فلا تجمد واحدة أمام العين
-const ROTATE: u64 = 300;
-
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Say {
     #[serde(default)]
@@ -83,31 +80,21 @@ pub fn refresh() -> Result<Board> {
     Ok(board)
 }
 
-/// بطاقة تناسب هذه المنصّة، وبطاقات الكل لمن لا بطاقة خاصّة له
-///
-/// المنصّة الفارغة تعني الشاشة الأولى، فتأخذ بطاقات الكل وحدها
-pub fn pick<'a>(board: &'a Board, platform: &str, now: u64) -> Option<&'a Card> {
-    let general = |c: &&Card| c.platforms.is_empty();
-    let mut pool: Vec<&Card> = if platform.is_empty() {
-        board.cards.iter().filter(general).collect()
-    } else {
-        board
-            .cards
-            .iter()
-            .filter(|c| c.platforms.iter().any(|p| p == platform))
-            .collect()
-    };
-    if pool.is_empty() {
-        pool = board.cards.iter().filter(general).collect();
+/// بطاقات هذه المنصّة أوّلًا ثم العامّة، فمن فتح باتل نت رأى بطاقته قبل
+/// غيرها ثم دارت عليه البقية، والمنصّة الفارغة تعني الشاشة الأولى فلها العامّة
+pub fn pool<'a>(board: &'a Board, platform: &str) -> Vec<&'a Card> {
+    let titled = |c: &&Card| !c.title.ar.trim().is_empty() || !c.title.en.trim().is_empty();
+    let general = board.cards.iter().filter(|c| c.platforms.is_empty());
+    if platform.is_empty() {
+        return general.filter(titled).collect();
     }
-    let usable: Vec<&Card> = pool
-        .into_iter()
-        .filter(|c| !c.title.ar.trim().is_empty() || !c.title.en.trim().is_empty())
-        .collect();
-    if usable.is_empty() {
-        return None;
-    }
-    Some(usable[(now / ROTATE) as usize % usable.len()])
+    board
+        .cards
+        .iter()
+        .filter(|c| c.platforms.iter().any(|p| p == platform))
+        .chain(general)
+        .filter(titled)
+        .collect()
 }
 
 #[cfg(test)]
@@ -133,27 +120,25 @@ mod tests {
     }
 
     #[test]
-    fn a_platform_gets_its_own_card_and_others_fall_back_to_the_general_ones() {
+    fn a_platform_sees_its_own_card_first_then_the_general_ones() {
         let b = load_test_board();
-        assert_eq!(pick(&b, "battlenet", 0).map(|c| c.id.as_str()), Some("bnet"));
-        // منصّة لا بطاقة لها تأخذ من العامّ
-        assert_eq!(pick(&b, "riot", 0).map(|c| c.id.as_str()), Some("all"));
-        // الشاشة الأولى تأخذ العامّ ولو كانت هناك بطاقات منصّات
-        assert_eq!(pick(&b, "", 0).map(|c| c.id.as_str()), Some("all"));
-        assert!(pick(&Board::default(), "steam", 0).is_none());
+        let ids = |p: &str| pool(&b, p).iter().map(|c| c.id.clone()).collect::<Vec<_>>();
+        assert_eq!(ids("battlenet"), vec!["bnet", "all"]);
+        // منصّة لا بطاقة لها تأخذ العامّ وحده
+        assert_eq!(ids("riot"), vec!["all"]);
+        // الشاشة الأولى لا ترى بطاقات المنصّات
+        assert_eq!(ids(""), vec!["all"]);
+        assert!(pool(&Board::default(), "steam").is_empty());
     }
 
     #[test]
-    fn the_shown_card_rotates_with_time() {
+    fn a_card_without_a_title_never_shows() {
         let mut b = load_test_board();
         b.cards.push(Card {
-            id: "all2".into(),
-            title: Say { ar: "ب".into(), en: "b".into() },
+            id: "blank".into(),
             ..Default::default()
         });
-        assert_eq!(pick(&b, "", 0).map(|c| c.id.as_str()), Some("all"));
-        assert_eq!(pick(&b, "", ROTATE).map(|c| c.id.as_str()), Some("all2"));
-        assert_eq!(pick(&b, "", ROTATE * 2).map(|c| c.id.as_str()), Some("all"));
+        assert!(pool(&b, "").iter().all(|c| c.id != "blank"));
     }
 
     fn load_test_board() -> Board {

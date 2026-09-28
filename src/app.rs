@@ -49,6 +49,10 @@ pub struct Settings {
     pub board: bool,
 }
 
+/// كم تبقى بطاقة اللوحة قبل أن تدور، أطول من بطاقة الشاشة الأولى لأنها
+/// بجوار قائمة يختار منها المستخدم فلا يليق بها أن تشغله
+const PROMO_DWELL: f32 = 9.0;
+
 fn yes() -> bool {
     true
 }
@@ -172,6 +176,8 @@ pub struct App {
     presence: presence::Presence,
     board: board::Board,
     board_rx: Option<Receiver<anyhow::Result<board::Board>>>,
+    promo: Showcase,
+    promo_hot: bool,
 }
 
 impl App {
@@ -255,6 +261,8 @@ impl App {
             presence: presence::Presence::new(),
             board: board::load(),
             board_rx: None,
+            promo: Showcase::default(),
+            promo_hot: false,
         };
         app.picking = app.book.profiles.len() > 1;
         app.presence.set_enabled(app.settings.discord);
@@ -456,6 +464,7 @@ impl App {
         self.list_in = 0.0;
         self.selected = None;
         self.search.clear();
+        self.promo = Showcase::default();
         self.reload();
         self.offer_current();
     }
@@ -750,6 +759,13 @@ impl eframe::App for App {
         let pick_target = if self.picking { 1.0 } else { 0.0 };
         self.pick_in = mo.step(self.pick_in, pick_target, dt, motion::SPEED_PANEL);
         self.show.tick(dt, mo);
+        if self.route == Route::Accounts && self.settings.board {
+            if self.promo_hot {
+                self.promo.hold = 0.0;
+            }
+            let n = board::pool(&self.board, self.platform.id).len();
+            self.promo.tick_n(dt, mo, n, PROMO_DWELL);
+        }
         self.tell_discord();
         if self.curtain > 0.0 {
             self.curtain = if mo.enabled {
@@ -773,6 +789,7 @@ impl eframe::App for App {
             || self.busy.is_some()
             || !self.toasts.is_empty()
             || self.show.moving()
+            || self.promo.moving()
             || self.curtain > 0.0
             || self.tour.is_some();
         let (focused, pointer, minimized) = ctx.input(|i| {
@@ -1290,20 +1307,24 @@ impl App {
         let mut want_add = false;
         let mut action: Option<(String, u8)> = None;
         let mut search = std::mem::take(&mut self.search);
-        let promo: Option<[String; 5]> = self
-            .settings
-            .board
-            .then(|| board::pick(&self.board, plat_id, store::now_secs()))
-            .flatten()
-            .map(|c| {
-                [
-                    c.badge.t(rtl).to_string(),
-                    c.title.t(rtl).to_string(),
-                    c.body.t(rtl).to_string(),
-                    c.cta.t(rtl).to_string(),
-                    c.url.clone(),
-                ]
-            });
+        let faces: Vec<ui::Face> = if self.settings.board {
+            board::pool(&self.board, plat_id)
+                .into_iter()
+                .map(|c| {
+                    [
+                        c.badge.t(rtl).to_string(),
+                        c.title.t(rtl).to_string(),
+                        c.body.t(rtl).to_string(),
+                        c.cta.t(rtl).to_string(),
+                        c.url.clone(),
+                    ]
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let (promo_i, promo_prev, promo_t) = (self.promo.i, self.promo.prev, self.promo.t);
+        let mut promo_hot = false;
         let mut open_link: Option<String> = None;
 
         let panel = if rtl {
@@ -1404,8 +1425,8 @@ impl App {
                         let avail = ui.available_rect_before_wrap();
                         // اللوحة تأخذ شريحتها من الأسفل، ولا تظهر إلا إن بقي
                         // للقائمة متّسع فلا تزحمها على الشاشات القصيرة
-                        let card = promo.as_ref().filter(|_| avail.height() > 320.0);
-                        let card_h = if card.is_some() { 122.0 } else { 0.0 };
+                        let card = !faces.is_empty() && avail.height() > 320.0;
+                        let card_h = if card { 134.0 } else { 0.0 };
                         let list_rect = Rect::from_min_size(
                             avail.min,
                             vec2(
@@ -1446,28 +1467,35 @@ impl App {
                                 });
                         });
 
-                        if let Some([badge, title, body, cta, url]) = card {
+                        if card {
+                            let n = faces.len();
+                            let cur = &faces[promo_i.min(n - 1)];
+                            let prev = (promo_prev != promo_i && promo_prev < n)
+                                .then(|| &faces[promo_prev]);
+                            // تدخل بعد أن تبدأ الحسابات بالظهور، صاعدة قليلًا كما تدخل هي
+                            let appear = ease_out((self.list_in * 3.4 - 0.5).clamp(0.0, 1.0));
                             let r = Rect::from_min_size(
                                 pos2(
                                     outer.left() + 14.0,
-                                    outer.bottom() - 14.0 - btn_h - 10.0 - (card_h - 10.0),
+                                    outer.bottom() - 14.0 - btn_h - card_h
+                                        + (1.0 - appear) * 10.0,
                                 ),
                                 vec2(outer.width() - 28.0, card_h - 10.0),
                             );
-                            if ui::promo_card(
+                            let (clicked, hot) = ui::promo_card(
                                 ui,
                                 r,
                                 &pal,
                                 rtl,
                                 platform_color(plat_id),
-                                badge,
-                                title,
-                                body,
-                                cta,
-                                ease_out(self.list_in),
-                            ) && !url.is_empty()
-                            {
-                                open_link = Some(url.clone());
+                                cur,
+                                prev,
+                                promo_t,
+                                appear,
+                            );
+                            promo_hot = hot;
+                            if clicked {
+                                open_link = Some(cur[4].clone());
                             }
                         }
 
@@ -1497,6 +1525,7 @@ impl App {
             });
 
         self.search = search;
+        self.promo_hot = promo_hot;
         if let Some(url) = open_link {
             let _ = std::process::Command::new("explorer.exe").arg(url).spawn();
         }
@@ -2543,8 +2572,8 @@ impl App {
                 4,
                 lang.t("التحديثات", "Updates"),
                 lang.t(
-                    "الاتصال الوحيد الذي يخرج من البرنامج",
-                    "The only connection this program ever makes",
+                    "كل ما يتصل بالإنترنت، وما يكلّم إلا GitHub",
+                    "Everything that goes online, and it only talks to GitHub",
                 ),
             ),
             (
@@ -3062,19 +3091,6 @@ impl App {
                                     ) {
                                         toggle_discord = true;
                                     }
-                                    if ui::toggle(
-                                        ui,
-                                        &pal,
-                                        rtl,
-                                        lang.t("لوحة أثلاوي", "Athlawi's board"),
-                                        lang.t(
-                                            "بطاقة صغيرة فيها كلمة أو عمل آخر لريان، تُقرأ من موقعه ولا تُرسل من جهازك شيئًا",
-                                            "A small card with a word or another of Ryan's works, read from his site and sending nothing from your PC",
-                                        ),
-                                        self.settings.board,
-                                    ) {
-                                        toggle_board = true;
-                                    }
                                     if ui::setting_row(
                                         ui,
                                         &pal,
@@ -3099,12 +3115,25 @@ impl App {
                                             "Check for updates automatically",
                                         ),
                                         lang.t(
-                                            "هذا الاتصال الوحيد الذي يخرج من البرنامج",
-                                            "The only connection this app ever makes",
+                                            "يسأل GitHub عن نسخة جديدة ولا يرسل له شي عنك",
+                                            "Asks GitHub for a new version and sends nothing about you",
                                         ),
                                         self.settings.auto_update,
                                     ) {
                                         toggle_autoupd = true;
+                                    }
+                                    if ui::toggle(
+                                        ui,
+                                        &pal,
+                                        rtl,
+                                        lang.t("لوحة أثلاوي", "Athlawi's board"),
+                                        lang.t(
+                                            "بطاقة فيها كلمة أو برنامج ثاني لنا، تجي من موقعنا على GitHub ولا يطلع من جهازك شي",
+                                            "A card with a word or another of our apps, fetched from our site on GitHub, nothing leaves your PC",
+                                        ),
+                                        self.settings.board,
+                                    ) {
+                                        toggle_board = true;
                                     }
                                     ui::info_row(
                                         ui,

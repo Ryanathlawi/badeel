@@ -78,8 +78,8 @@ pub const CARDS: [Card; 7] = [
         tag: ("بلا تتبّع", "NO TRACKING"),
         title: ("ما يطلع منه شيء", "Nothing leaves your PC"),
         body: (
-            "بلا حسابات وبلا خوادم وبلا تحليلات، والاتصال الوحيد هو فحص التحديثات وتقدر توقفه.",
-            "No accounts, no servers, no analytics. The only connection it makes is the update check, and you can stop that too.",
+            "بلا حسابات وبلا خوادم وبلا تحليلات، وما يكلّم إلا GitHub يسأله عن التحديثات ويجيب منه اللوحة، وتقدر توقف الاثنين",
+            "No accounts, no servers, no analytics. It only ever talks to GitHub, to check for updates and fetch the board, and you can turn both off.",
         ),
         glyph: 6,
         hue: 2,
@@ -90,10 +90,10 @@ pub const DWELL: f32 = 6.5;
 const SLIDE: f32 = 26.0;
 
 pub struct Showcase {
-    i: usize,
-    prev: usize,
-    t: f32,
-    hold: f32,
+    pub(crate) i: usize,
+    pub(crate) prev: usize,
+    pub(crate) t: f32,
+    pub(crate) hold: f32,
 }
 
 impl Default for Showcase {
@@ -109,22 +109,36 @@ impl Default for Showcase {
 
 impl Showcase {
     pub fn tick(&mut self, dt: f32, mo: Motion) {
+        self.tick_n(dt, mo, CARDS.len(), DWELL);
+    }
+
+    /// الدوران نفسه لأي عدد من البطاقات، وبه تدور لوحة المنصّة أيضًا
+    /// فتتحرّك بطاقتها كما تتحرّك بطاقة الشاشة الأولى لا بحركة غريبة عنها
+    pub fn tick_n(&mut self, dt: f32, mo: Motion, n: usize, dwell: f32) {
         if self.t < 1.0 {
             self.t = if mo.enabled { (self.t + dt * 1.9).min(1.0) } else { 1.0 };
             return;
         }
+        if n < 2 {
+            self.hold = 0.0;
+            return;
+        }
         self.hold += dt;
-        if self.hold >= DWELL {
-            self.go((self.i + 1) % CARDS.len(), mo);
+        if self.hold >= dwell {
+            self.go_n((self.i + 1) % n, mo, n);
         }
     }
 
     pub fn go(&mut self, to: usize, mo: Motion) {
-        if to == self.i {
+        self.go_n(to, mo, CARDS.len());
+    }
+
+    fn go_n(&mut self, to: usize, mo: Motion, n: usize) {
+        if to == self.i || n == 0 {
             return;
         }
         self.prev = self.i;
-        self.i = to.min(CARDS.len() - 1);
+        self.i = to.min(n - 1);
         self.hold = 0.0;
         self.t = if mo.enabled { 0.0 } else { 1.0 };
     }
