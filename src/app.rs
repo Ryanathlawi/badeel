@@ -9,7 +9,7 @@ use crate::core::update::{self, Progress};
 use crate::core::vault::{self, VaultKey};
 use crate::about;
 use crate::core::profile::{self, Book};
-use crate::core::{bnet, board, paths, presence, procs, steam, store, switch};
+use crate::core::{bnet, board, paths, presence, procs, steam, store, switch, transfer};
 use crate::i18n::Lang;
 use crate::motion::{self, Motion, back_out, ease_out};
 use crate::showcase::{self, Showcase};
@@ -94,6 +94,8 @@ pub enum ToastKind {
 pub enum Dialog {
     None,
     Find { query: String, pick: usize },
+    Export { a: String, b: String, error: String },
+    Import { file: std::path::PathBuf, password: String, error: String },
     AddAccount { name: String, error: String },
     Rename { id: String, name: String },
     Confirm { id: String, name: String },
@@ -180,6 +182,7 @@ pub struct App {
     promo: Showcase,
     promo_hot: bool,
     find: Vec<Hit>,
+    transfer_rx: Option<Receiver<(bool, Result<String, String>)>>,
 }
 
 impl App {
@@ -266,6 +269,7 @@ impl App {
             promo: Showcase::default(),
             promo_hot: false,
             find: Vec::new(),
+            transfer_rx: None,
         };
         app.picking = app.book.profiles.len() > 1;
         app.presence.set_enabled(app.settings.discord);
@@ -426,6 +430,69 @@ impl App {
         self.promo = Showcase::default();
         self.reload();
         self.offer_current();
+    }
+
+    /// التصدير والاستيراد يشتقّان مفتاحًا بـ Argon2 ويفكّان ويشفّران كل ملف،
+    /// فيعملان في خيط مستقل ولا تتجمّد النافذة
+    fn start_transfer(&mut self, import: bool, file: std::path::PathBuf, password: String) {
+        let Some(key) = self.key.clone() else { return };
+        let lang = self.settings.lang;
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let password = zeroize::Zeroizing::new(password);
+            let r = if import {
+                transfer::import(&key, &password, &file).map(|m| match (lang.rtl(), m.skipped) {
+                    (true, 0) => format!("تمت إضافة {} حساب", m.added),
+                    (true, k) => format!("تمت إضافة {} حساب، و{k} موجود أصلًا", m.added),
+                    (false, 0) => format!("Added {} accounts", m.added),
+                    (false, k) => format!("Added {} accounts, {k} were already here", m.added),
+                })
+            } else {
+                transfer::export(&key, &password, &file).map(|n| {
+                    if lang.rtl() {
+                        format!("تم التصدير، {n} حساب في الملف")
+                    } else {
+                        format!("Exported {n} accounts")
+                    }
+                })
+            };
+            let _ = tx.send((import, r.map_err(|e| format!("{e:#}"))));
+        });
+        self.transfer_rx = Some(rx);
+        self.toast(
+            if import {
+                lang.t("جارٍ الاستيراد", "Importing")
+            } else {
+                lang.t("جارٍ التصدير", "Exporting")
+            },
+            ToastKind::Ok,
+        );
+    }
+
+    fn poll_transfer(&mut self) {
+        let Some(rx) = &self.transfer_rx else { return };
+        let (import, result) = match rx.try_recv() {
+            Ok(got) => got,
+            Err(std::sync::mpsc::TryRecvError::Empty) => return,
+            Err(_) => {
+                self.transfer_rx = None;
+                return;
+            }
+        };
+        self.transfer_rx = None;
+        match result {
+            Ok(msg) => {
+                self.toast(msg, ToastKind::Ok);
+                if import {
+                    self.counts = catalog::PLATFORMS
+                        .iter()
+                        .map(|p| store::load(p.id).accounts.len())
+                        .collect();
+                    self.reload();
+                }
+            }
+            Err(e) => self.toast(e, ToastKind::Err),
+        }
     }
 
     /// يجمع حسابات كل المنصّات المثبّتة مرّة عند الفتح، لا في كل إطار
@@ -779,6 +846,7 @@ impl eframe::App for App {
 
         self.poll_jobs(ctx);
         self.poll_board();
+        self.poll_transfer();
         self.hotkeys(root);
         self.guard(ctx);
 
@@ -2507,6 +2575,8 @@ impl App {
         let mut want_password = false;
         let mut want_remove_password = false;
         let mut want_folder = false;
+        let mut want_export = false;
+        let mut want_import = false;
         let mut want_tour = false;
         let mut want_check = false;
         let mut want_about = false;
@@ -3107,6 +3177,32 @@ impl App {
                                     ) {
                                         want_folder = true;
                                     }
+                                    if ui::setting_row(
+                                        ui,
+                                        &pal,
+                                        rtl,
+                                        lang.t("انقل حساباتك لجهاز ثاني", "Move accounts to another PC"),
+                                        lang.t(
+                                            "ملف واحد مقفل بكلمة سر تختارها، يفتح على أي جهاز",
+                                            "One file locked with a password you pick, opens on any PC",
+                                        ),
+                                        lang.t("تصدير", "Export"),
+                                    ) {
+                                        want_export = true;
+                                    }
+                                    if ui::setting_row(
+                                        ui,
+                                        &pal,
+                                        rtl,
+                                        lang.t("استورد من ملف نقل", "Import a transfer file"),
+                                        lang.t(
+                                            "يضيف الحسابات الجديدة ولا يمسّ الموجودة",
+                                            "Adds new accounts and leaves the ones here alone",
+                                        ),
+                                        lang.t("استيراد", "Import"),
+                                    ) {
+                                        want_import = true;
+                                    }
                                 }
                                 4 => {
                                     if ui::toggle(
@@ -3342,6 +3438,27 @@ impl App {
                     ToastKind::Ok,
                 ),
                 Err(e) => self.toast(format!("{e:#}"), ToastKind::Err),
+            }
+        }
+        if want_export {
+            self.dialog = Dialog::Export {
+                a: String::new(),
+                b: String::new(),
+                error: String::new(),
+            };
+        }
+        if want_import {
+            let lang = self.settings.lang;
+            if let Some(file) = rfd::FileDialog::new()
+                .add_filter(lang.t("ملف نقل بديل", "badeel transfer file"), &["badeel"])
+                .set_title(lang.t("اختر ملف النقل", "Pick the transfer file"))
+                .pick_file()
+            {
+                self.dialog = Dialog::Import {
+                    file,
+                    password: String::new(),
+                    error: String::new(),
+                };
             }
         }
         if want_folder {
@@ -3632,8 +3749,143 @@ impl App {
         let mut close = false;
 
         let mut found: Option<(&'static Platform, String, bool)> = None;
+        let mut export_pw: Option<String> = None;
+        let mut import_job: Option<(std::path::PathBuf, String)> = None;
         match &mut self.dialog {
             Dialog::None => {}
+            Dialog::Export { a, b, error } => {
+                let mut confirm = false;
+                let modal = egui::Modal::new(egui::Id::new("export")).show(ctx, |ui| {
+                    ui.set_width(380.0);
+                    ui::dialog_title(ui, &pal, rtl, lang.t("انقل حساباتك", "Move your accounts"));
+                    ui.label(
+                        RichText::new(lang.t(
+                            "اختر كلمة سر تفتح بها الملف على الجهاز الثاني، وما نقدر نسترجعها لو نسيتها",
+                            "Pick a password to open the file on the other PC. It can't be recovered if you forget it.",
+                        ))
+                        .size(11.5)
+                        .color(pal.text),
+                    );
+                    ui.add_space(4.0);
+                    ui.label(
+                        RichText::new(lang.t(
+                            "تنتقل الأسماء والصور والجلسات، وبعض المنصّات تربط الجلسة بجهازها فقد تطلب تسجيل الدخول مرة على الجهاز الجديد",
+                            "Names, pictures and sessions all move. Some platforms tie a session to the PC, so they may ask you to sign in once on the new one.",
+                        ))
+                        .size(10.5)
+                        .color(pal.muted),
+                    );
+                    ui.add_space(10.0);
+                    ui.add(
+                        egui::TextEdit::singleline(a)
+                            .password(true)
+                            .hint_text(lang.t("كلمة السر، 8 أحرف أو أكثر", "password, 8 characters or more"))
+                            .desired_width(f32::INFINITY),
+                    );
+                    ui.add(
+                        egui::TextEdit::singleline(b)
+                            .password(true)
+                            .hint_text(lang.t("أعد كتابتها", "type it again"))
+                            .desired_width(f32::INFINITY),
+                    );
+                    if !error.is_empty() {
+                        ui.label(RichText::new(error.as_str()).size(11.0).color(pal.danger));
+                    }
+                    ui.add_space(12.0);
+                    let l = if rtl {
+                        Layout::right_to_left(Align::Center)
+                    } else {
+                        Layout::left_to_right(Align::Center)
+                    };
+                    ui.with_layout(l, |ui| {
+                        if ui::solid_button(ui, &pal, lang.t("صدّر", "Export"), pal.accent_deep)
+                            .clicked()
+                            || ui.input(|i| i.key_pressed(egui::Key::Enter))
+                        {
+                            confirm = true;
+                        }
+                        if ui::ghost_button(ui, &pal, lang.t("إلغاء", "Cancel")).clicked() {
+                            close = true;
+                        }
+                    });
+                });
+                if confirm {
+                    if a.chars().count() < 8 {
+                        *error = lang
+                            .t("كلمة السر لازم تكون 8 أحرف أو أكثر", "Use at least 8 characters")
+                            .to_string();
+                    } else if a != b {
+                        *error = lang
+                            .t("الكلمتان مو متطابقتين", "The two don't match")
+                            .to_string();
+                    } else {
+                        export_pw = Some(a.clone());
+                        close = true;
+                    }
+                }
+                if modal.should_close() {
+                    close = true;
+                }
+            }
+            Dialog::Import { file, password, error } => {
+                let mut confirm = false;
+                let name = file
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                let modal = egui::Modal::new(egui::Id::new("import")).show(ctx, |ui| {
+                    ui.set_width(380.0);
+                    ui::dialog_title(ui, &pal, rtl, lang.t("استيراد الحسابات", "Import accounts"));
+                    ui.label(RichText::new(name.as_str()).size(11.0).color(pal.accent));
+                    ui.add_space(4.0);
+                    ui.label(
+                        RichText::new(lang.t(
+                            "الحسابات الموجودة هنا ما تُمسّ، يُضاف الجديد بس",
+                            "Accounts already here stay as they are, only new ones are added.",
+                        ))
+                        .size(11.0)
+                        .color(pal.muted),
+                    );
+                    ui.add_space(10.0);
+                    ui.add(
+                        egui::TextEdit::singleline(password)
+                            .password(true)
+                            .hint_text(lang.t("كلمة سر الملف", "the file's password"))
+                            .desired_width(f32::INFINITY),
+                    );
+                    if !error.is_empty() {
+                        ui.label(RichText::new(error.as_str()).size(11.0).color(pal.danger));
+                    }
+                    ui.add_space(12.0);
+                    let l = if rtl {
+                        Layout::right_to_left(Align::Center)
+                    } else {
+                        Layout::left_to_right(Align::Center)
+                    };
+                    ui.with_layout(l, |ui| {
+                        if ui::solid_button(ui, &pal, lang.t("استورد", "Import"), pal.accent_deep)
+                            .clicked()
+                            || ui.input(|i| i.key_pressed(egui::Key::Enter))
+                        {
+                            confirm = true;
+                        }
+                        if ui::ghost_button(ui, &pal, lang.t("إلغاء", "Cancel")).clicked() {
+                            close = true;
+                        }
+                    });
+                });
+                if confirm {
+                    if password.is_empty() {
+                        *error = lang.t("اكتب كلمة سر الملف", "Enter the file's password").to_string();
+                    } else {
+                        import_job = Some((file.clone(), password.clone()));
+                        close = true;
+                    }
+                }
+                if modal.should_close() {
+                    close = true;
+                }
+            }
             Dialog::Find { query, pick } => {
                 let t = self.t0.elapsed().as_secs_f32();
                 let hits = rank(&self.find, query);
@@ -4237,6 +4489,20 @@ impl App {
         }
         if let Some((plat, id, live)) = found {
             self.go_to_hit(plat, id, live);
+        }
+        if let Some(pw) = export_pw {
+            let lang = self.settings.lang;
+            if let Some(dest) = rfd::FileDialog::new()
+                .add_filter(lang.t("ملف نقل بديل", "badeel transfer file"), &["badeel"])
+                .set_title(lang.t("وين تحفظ ملف النقل؟", "Where should the transfer file go?"))
+                .set_file_name("badeel-accounts.badeel")
+                .save_file()
+            {
+                self.start_transfer(false, dest, pw);
+            }
+        }
+        if let Some((file, pw)) = import_job {
+            self.start_transfer(true, file, pw);
         }
     }
 }

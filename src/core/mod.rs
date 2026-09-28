@@ -12,6 +12,7 @@ pub mod registry;
 pub mod steam;
 pub mod store;
 pub mod switch;
+pub mod transfer;
 pub mod update;
 pub mod vault;
 pub mod vdf;

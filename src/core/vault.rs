@@ -245,6 +245,39 @@ pub fn set_password(current: Option<&str>, new: Option<&str>) -> Result<()> {
     write_vault(&file)
 }
 
+/// صندوق يُقفل بكلمة سر وحدها لا بالجهاز، فيُفتح على أي جهاز يعرف صاحبه كلمته
+///
+/// هذا عكس الخزنة التي تحميها أنها لا تُفتح إلا هنا، ولهذا لا يُستعمل إلا لملفّ
+/// ينقل به المستخدم حساباته بنفسه
+#[derive(Serialize, Deserialize)]
+pub struct Sealed {
+    kdf: Kdf,
+    data: String,
+}
+
+pub fn seal_with(password: &str, plain: &[u8]) -> Result<Sealed> {
+    let kdf = Kdf {
+        salt: random_b64(16),
+        ..Kdf::default()
+    };
+    let key = derive(password, &kdf)?;
+    Ok(Sealed {
+        data: b64_encode(&aes_seal(key.as_ref(), plain)?),
+        kdf,
+    })
+}
+
+/// معطيات الاشتقاق هنا تأتي من ملف لا نعرف مصدره، فتُحدّ قبل أن تُستعمل، ولولا
+/// ذلك لطلب ملف مصنوع ذاكرة بالجيجات فتجمّد البرنامج
+pub fn open_with(password: &str, sealed: &Sealed) -> Result<Zeroizing<Vec<u8>>> {
+    let k = &sealed.kdf;
+    if k.mem_kib > 1024 * 1024 || k.passes > 16 || k.lanes > 8 || k.mem_kib < 8 * 1024 {
+        bail!("ملف غير صالح");
+    }
+    let key = derive(password, k)?;
+    aes_open(key.as_ref(), &b64_decode(&sealed.data)?)
+}
+
 fn derive(password: &str, kdf: &Kdf) -> Result<Zeroizing<[u8; 32]>> {
     use argon2::{Algorithm, Argon2, Params, Version};
     let salt = b64_decode(&kdf.salt)?;
@@ -402,6 +435,21 @@ pub fn b64_decode(s: &str) -> Result<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_password_box_opens_with_its_password_only() {
+        let sealed = seal_with("correct horse", b"session bytes").unwrap();
+        assert_eq!(open_with("correct horse", &sealed).unwrap().as_slice(), b"session bytes");
+        assert!(open_with("wrong", &sealed).is_err());
+    }
+
+    #[test]
+    fn a_crafted_box_cannot_demand_absurd_memory() {
+        let mut sealed = seal_with("pw", b"x").unwrap();
+        sealed.kdf.mem_kib = 64 * 1024 * 1024;
+        assert!(open_with("pw", &sealed).is_err());
+    }
+
     use super::*;
 
     #[test]
