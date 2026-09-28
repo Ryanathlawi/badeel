@@ -739,3 +739,40 @@ pub fn panel(
 
     clicked
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ON: Motion = Motion {
+        enabled: true,
+        backdrop: false,
+    };
+
+    fn run(sc: &mut Showcase, secs: f32, n: usize, dwell: f32) {
+        let dt = 1.0 / 30.0;
+        for _ in 0..(secs / dt) as usize {
+            sc.tick_n(dt, ON, n, dwell);
+        }
+    }
+
+    #[test]
+    fn it_turns_after_the_dwell_and_wraps_around() {
+        let mut sc = Showcase::default();
+        run(&mut sc, 8.0, 3, 9.0);
+        assert_eq!(sc.i, 0, "لم يحن وقتها بعد");
+        run(&mut sc, 2.0, 3, 9.0);
+        assert_eq!(sc.i, 1);
+        run(&mut sc, 9.6, 3, 9.0);
+        assert_eq!(sc.i, 2);
+        run(&mut sc, 9.6, 3, 9.0);
+        assert_eq!(sc.i, 0, "تعود إلى الأولى");
+    }
+
+    #[test]
+    fn a_single_card_stays_put() {
+        let mut sc = Showcase::default();
+        run(&mut sc, 60.0, 1, 9.0);
+        assert_eq!(sc.i, 0);
+    }
+}
