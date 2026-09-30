@@ -405,6 +405,9 @@ impl App {
         self.bnet_why = (matches!(self.platform.identity, catalog::Identity::Bnet)
             && self.accounts.accounts.is_empty())
         .then(bnet::why_empty);
+        if let Some(bnet::Empty::Unreadable(e)) = &self.bnet_why {
+            log::warn!("إعدادات باتل نت لم تُقرأ: {e}");
+        }
         let i = catalog::index_of(self.platform.id);
         if let Some(c) = self.counts.get_mut(i) {
             *c = self.accounts.accounts.len();
@@ -2317,41 +2320,35 @@ impl App {
             // باتل نت الفارغ يقول السبب، فالصفحة الساكتة كانت تترك المستخدم لا يدري
             let why = self.bnet_why.clone().filter(|_| none_saved).map(|w| match w {
                 bnet::Empty::NoConfig => (
-                    lang.t("ما لقيت إعدادات باتل نت", "Battle.net's settings aren't here"),
+                    lang.t("باتل نت ما انفتح عندك للحين", "Battle.net hasn't been opened on this PC yet"),
                     lang.t(
-                        "افتح باتل نت وسجّل دخولك مرة وبعدها ارجع هنا",
+                        "افتح باتل نت وسجّل دخولك مرة، وبعدها ارجع هنا",
                         "Open Battle.net, sign in once, then come back",
-                    )
-                    .to_string(),
+                    ),
                     false,
                 ),
-                bnet::Empty::Unreadable(e) => (
-                    lang.t("ملف إعدادات باتل نت ما انقرأ", "Couldn't read Battle.net's settings"),
-                    e,
+                bnet::Empty::Unreadable(_) => (
+                    lang.t("ملف باتل نت خربان وما قدرت أقراه", "Battle.net's settings file is damaged"),
+                    lang.t(
+                        "افتح باتل نت وسجّل دخولك مرة عشان يصلّحه، وبعدها ارجع هنا",
+                        "Open Battle.net and sign in once so it repairs it, then come back",
+                    ),
                     false,
                 ),
                 bnet::Empty::NotRemembered => (
+                    lang.t("باتل نت ما يحفظ إيميلاتك", "Battle.net isn't saving your emails"),
                     lang.t(
-                        "باتل نت مضبوط ما يتذكّر حساباتك",
-                        "Battle.net is set not to remember your accounts",
+                        "اضغط الزر، وبعدها افتح باتل نت وسجّل دخولك مرة",
+                        "Press the button, then open Battle.net and sign in once",
                     ),
-                    lang.t(
-                        "بديل يقرأ الحسابات الي يتذكّرها باتل نت، شغّل التذكّر وسجّل دخولك مرة",
-                        "badeel reads the accounts Battle.net remembers. Turn it on and sign in once",
-                    )
-                    .to_string(),
                     true,
                 ),
                 bnet::Empty::NothingSaved => (
+                    lang.t("باتل نت ما حفظ ولا حساب للحين", "Battle.net hasn't saved an account yet"),
                     lang.t(
-                        "باتل نت ما حفظ ولا حساب للحين",
-                        "Battle.net hasn't saved an account yet",
+                        "افتح باتل نت وسجّل دخولك مرة، وبيطلع حسابك هنا",
+                        "Open Battle.net, sign in once, and your account shows up here",
                     ),
-                    lang.t(
-                        "سجّل دخولك في باتل نت مرة وبيطلع حسابك هنا",
-                        "Sign in to Battle.net once and your account shows up here",
-                    )
-                    .to_string(),
                     false,
                 ),
             });
@@ -2379,7 +2376,7 @@ impl App {
                 pos2(inner.center().x, inner.center().y + 22.0),
                 Align2::CENTER_CENTER,
                 if let Some((_, hint, _)) = &why {
-                    hint.as_str()
+                    hint
                 } else if none_saved && self.platform.identity.own_list() {
                     lang.t(
                         "سجّل دخولك في المنصّة كالمعتاد وبديل يتعرّف على حساباتك وحده",
@@ -2412,7 +2409,7 @@ impl App {
                                 ui::solid_button(
                                     ui,
                                     &pal,
-                                    lang.t("شغّل التذكّر", "Turn it on"),
+                                    lang.t("فعّل حفظ الإيميلات", "Save my emails"),
                                     pal.accent_deep,
                                 )
                                 .clicked()
