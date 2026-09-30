@@ -183,6 +183,7 @@ pub struct App {
     promo_hot: bool,
     find: Vec<Hit>,
     transfer_rx: Option<Receiver<(bool, Result<String, String>)>>,
+    bnet_why: Option<bnet::Empty>,
 }
 
 impl App {
@@ -204,7 +205,7 @@ impl App {
         let installed: Vec<bool> = catalog::PLATFORMS.iter().map(procs::installed).collect();
         let counts: Vec<usize> = catalog::PLATFORMS
             .iter()
-            .map(|p| store::load(p.id).accounts.len())
+            .map(|p| accounts_of(p).accounts.len())
             .collect();
         let tour = (!settings.seen_tour).then_some(0);
 
@@ -270,6 +271,7 @@ impl App {
             promo_hot: false,
             find: Vec::new(),
             transfer_rx: None,
+            bnet_why: None,
         };
         app.picking = app.book.profiles.len() > 1;
         app.presence.set_enabled(app.settings.discord);
@@ -400,6 +402,9 @@ impl App {
     fn reload(&mut self) {
         self.accounts = accounts_of(self.platform);
         self.current_id = switch::current_id(self.platform);
+        self.bnet_why = (matches!(self.platform.identity, catalog::Identity::Bnet)
+            && self.accounts.accounts.is_empty())
+        .then(bnet::why_empty);
         let i = catalog::index_of(self.platform.id);
         if let Some(c) = self.counts.get_mut(i) {
             *c = self.accounts.accounts.len();
@@ -486,13 +491,31 @@ impl App {
                 if import {
                     self.counts = catalog::PLATFORMS
                         .iter()
-                        .map(|p| store::load(p.id).accounts.len())
+                        .map(|p| accounts_of(p).accounts.len())
                         .collect();
                     self.reload();
                 }
             }
             Err(e) => self.toast(e, ToastKind::Err),
         }
+    }
+
+    /// باتل نت يُغلق أوّلًا، وإلا كتب عند خروجه قيمته القديمة فوق ما كتبناه
+    fn remember_bnet(&mut self) {
+        let lang = self.settings.lang;
+        let done = procs::close_all(self.platform.exes, self.platform.close)
+            .and_then(|_| bnet::remember_names());
+        match done {
+            Ok(()) => self.toast(
+                lang.t(
+                    "تم، افتح باتل نت وسجّل دخولك مرة وبيطلع حسابك هنا",
+                    "Done. Open Battle.net and sign in once, and your account shows up here",
+                ),
+                ToastKind::Ok,
+            ),
+            Err(e) => self.toast(format!("{e:#}"), ToastKind::Err),
+        }
+        self.reload();
     }
 
     /// يجمع حسابات كل المنصّات المثبّتة مرّة عند الفتح، لا في كل إطار
@@ -1668,7 +1691,7 @@ impl App {
             self.restyle(ctx);
             self.counts = catalog::PLATFORMS
                 .iter()
-                .map(|p| store::load(p.id).accounts.len())
+                .map(|p| accounts_of(p).accounts.len())
                 .collect();
             self.installed = catalog::PLATFORMS.iter().map(procs::installed).collect();
             self.selected = None;
@@ -2291,11 +2314,54 @@ impl App {
                 vec2(56.0, 56.0),
             );
             ui::platform_icon(root, icon, plat_id, color, alpha * 0.85);
+            // باتل نت الفارغ يقول السبب، فالصفحة الساكتة كانت تترك المستخدم لا يدري
+            let why = self.bnet_why.clone().filter(|_| none_saved).map(|w| match w {
+                bnet::Empty::NoConfig => (
+                    lang.t("ما لقيت إعدادات باتل نت", "Battle.net's settings aren't here"),
+                    lang.t(
+                        "افتح باتل نت وسجّل دخولك مرة وبعدها ارجع هنا",
+                        "Open Battle.net, sign in once, then come back",
+                    )
+                    .to_string(),
+                    false,
+                ),
+                bnet::Empty::Unreadable(e) => (
+                    lang.t("ملف إعدادات باتل نت ما انقرأ", "Couldn't read Battle.net's settings"),
+                    e,
+                    false,
+                ),
+                bnet::Empty::NotRemembered => (
+                    lang.t(
+                        "باتل نت مضبوط ما يتذكّر حساباتك",
+                        "Battle.net is set not to remember your accounts",
+                    ),
+                    lang.t(
+                        "بديل يقرأ الحسابات الي يتذكّرها باتل نت، شغّل التذكّر وسجّل دخولك مرة",
+                        "badeel reads the accounts Battle.net remembers. Turn it on and sign in once",
+                    )
+                    .to_string(),
+                    true,
+                ),
+                bnet::Empty::NothingSaved => (
+                    lang.t(
+                        "باتل نت ما حفظ ولا حساب للحين",
+                        "Battle.net hasn't saved an account yet",
+                    ),
+                    lang.t(
+                        "سجّل دخولك في باتل نت مرة وبيطلع حسابك هنا",
+                        "Sign in to Battle.net once and your account shows up here",
+                    )
+                    .to_string(),
+                    false,
+                ),
+            });
             let p = root.painter();
             p.text(
                 pos2(inner.center().x, inner.center().y - 6.0),
                 Align2::CENTER_CENTER,
-                if none_saved {
+                if let Some((title, _, _)) = &why {
+                    title
+                } else if none_saved {
                     lang.t(
                         "ما فيه حسابات محفوظة هنا بعد",
                         "No accounts saved here yet",
@@ -2312,7 +2378,9 @@ impl App {
             p.text(
                 pos2(inner.center().x, inner.center().y + 22.0),
                 Align2::CENTER_CENTER,
-                if none_saved && self.platform.identity.own_list() {
+                if let Some((_, hint, _)) = &why {
+                    hint.as_str()
+                } else if none_saved && self.platform.identity.own_list() {
                     lang.t(
                         "سجّل دخولك في المنصّة كالمعتاد وبديل يتعرّف على حساباتك وحده",
                         "Sign in on the platform as usual and badeel finds your accounts by itself",
@@ -2331,6 +2399,32 @@ impl App {
                 FontId::proportional(12.0),
                 pal.muted.gamma_multiply(alpha * 0.9),
             );
+            if why.as_ref().is_some_and(|(_, _, fixable)| *fixable) {
+                let btn = Rect::from_center_size(
+                    pos2(inner.center().x, inner.center().y + 64.0),
+                    vec2(190.0, 38.0),
+                );
+                let clicked = root
+                    .scope_builder(egui::UiBuilder::new().max_rect(btn), |ui| {
+                        ui.with_layout(
+                            Layout::centered_and_justified(egui::Direction::LeftToRight),
+                            |ui| {
+                                ui::solid_button(
+                                    ui,
+                                    &pal,
+                                    lang.t("شغّل التذكّر", "Turn it on"),
+                                    pal.accent_deep,
+                                )
+                                .clicked()
+                            },
+                        )
+                        .inner
+                    })
+                    .inner;
+                if clicked {
+                    self.remember_bnet();
+                }
+            }
             return;
         };
 
@@ -3388,7 +3482,7 @@ impl App {
                         self.restyle(ctx);
                         self.counts = catalog::PLATFORMS
                             .iter()
-                            .map(|p| store::load(p.id).accounts.len())
+                            .map(|p| accounts_of(p).accounts.len())
                             .collect();
                         self.selected = None;
                         self.search.clear();
@@ -4408,7 +4502,7 @@ impl App {
                             self.restyle(ctx);
                             self.counts = catalog::PLATFORMS
                                 .iter()
-                                .map(|p| store::load(p.id).accounts.len())
+                                .map(|p| accounts_of(p).accounts.len())
                                 .collect();
                             self.selected = None;
                             self.list_in = 0.0;
